@@ -30,6 +30,30 @@ Created automatically on first startup:
 | `l2`       | L2 Analyst   | `password123` |
 | `admin_l3` | L3 Admin     | `password123` |
 
+## Screenshots
+
+### Login
+
+![Login page](docs/screenshots/login.png)
+
+### Dashboard
+
+SOC dashboard with alert counts, pie charts, and filtered alert queue.
+
+![Dashboard](docs/screenshots/dashboard.png)
+
+### Alert detail
+
+Full alert view with assignment, IOCs, investigation notes, evidence uploads, and activity log.
+
+![Alert detail](docs/screenshots/alert-detail.png)
+
+### User administration
+
+Create users, manage roles (L1/L2/L3), and reset passwords.
+
+![Users admin](docs/screenshots/users-admin.png)
+
 ## Features
 
 ### Alert management
