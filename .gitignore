@@ -1,10 +1,37 @@
+# Python
 .venv/
 __pycache__/
 *.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Data & databases
 *.sqlite3
 *.db
+data/
+!data/.gitkeep
+
+# Environment
+.env
+.env.local
+
+# OS
 .DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Node (unused but safe)
 node_modules/
 npm-debug.log
+
+# Django legacy (removed)
 staticfiles/
+
+# Evidence uploads (runtime)
 data/evidence/

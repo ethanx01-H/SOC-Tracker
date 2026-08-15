@@ -3,9 +3,9 @@ services:
     build: .
     image: soc-alert-tracker:local
     environment:
-      N8N_API_KEY: change-me
+      N8N_API_KEY: ${N8N_API_KEY:?Set N8N_API_KEY in .env}
       N8N_API_HEADER: X-API-Key
-      APP_SECRET_KEY: dev-only-change-me
+      APP_SECRET_KEY: ${APP_SECRET_KEY:?Set APP_SECRET_KEY in .env}
       SQLITE_PATH: /app/data/fastapi.sqlite3
     ports:
       - "8080:8080"

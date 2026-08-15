@@ -1,9 +1,15 @@
+.git
+.gitignore
+.env
+.env.example
+.venv
 .agents
 .codex
-.git
 .DS_Store
 node_modules
 npm-debug.log
 Dockerfile
 docker-compose.yml
 data
+*.md
+!requirements.txt
