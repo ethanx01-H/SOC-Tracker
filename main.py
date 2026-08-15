@@ -1,5 +1,6 @@
 import csv
 import hashlib
+import hmac
 import io
 import json
 import math
@@ -49,6 +50,9 @@ engine = create_engine(f"sqlite:///{SQLITE_PATH}", connect_args={"check_same_thr
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 signer = URLSafeSerializer(SECRET_KEY, salt="soc-alert-tracker")
 rate_limits: dict[str, deque[float]] = defaultdict(deque)
+failed_logins: dict[str, list[float]] = defaultdict(list)
+LOGIN_LOCKOUT_THRESHOLD = int(os.environ.get("LOGIN_LOCKOUT_THRESHOLD", "5"))
+LOGIN_LOCKOUT_SECONDS = int(os.environ.get("LOGIN_LOCKOUT_SECONDS", "300"))
 
 app = FastAPI(title="SOC Alert Tracker")
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
@@ -66,7 +70,8 @@ async def security_middleware(request: Request, call_next):
         return JSONResponse({"ok": False, "error": "rate limit exceeded"}, status_code=429)
     attempts.append(now)
 
-    if request.method in {"POST", "PUT", "PATCH", "DELETE"} and not request.url.path.startswith("/api/"):
+    # CSRF check — skip only for webhook API endpoints
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"} and not request.url.path.startswith("/api/webhook"):
         cookie_token = request.cookies.get("csrf_token")
         header_token = request.headers.get("X-CSRF-Token")
         form_token = None
@@ -76,23 +81,30 @@ async def security_middleware(request: Request, call_next):
             parsed = parse_qs(body.decode("utf-8", errors="ignore"))
             values = parsed.get("csrf_token", [])
             form_token = values[0] if values else None
-
-            async def receive():
-                return {"type": "http.request", "body": body, "more_body": False}
-
-            request._receive = receive
         elif "multipart/form-data" in content_type:
             body = await request.body()
             match = re.search(rb'name="csrf_token"\r\n\r\n([^\r\n]+)', body)
             form_token = match.group(1).decode("utf-8", errors="ignore") if match else None
-
+        if content_type and ("application/x-www-form-urlencoded" in content_type or "multipart/form-data" in content_type):
             async def receive():
                 return {"type": "http.request", "body": body, "more_body": False}
-
             request._receive = receive
         if not cookie_token or (header_token or form_token) != cookie_token:
             return JSONResponse({"ok": False, "error": "invalid csrf token"}, status_code=403)
-    return await call_next(request)
+
+    response = await call_next(request)
+    # Security headers
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["X-XSS-Protection"] = "0"
+    response.headers["Content-Security-Policy"] = "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:"
+    if COOKIE_SECURE:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    if "server" in response.headers:
+        del response.headers["server"]
+    return response
 
 
 class Base(DeclarativeBase):
@@ -664,11 +676,28 @@ async def login_page(request: Request, db: DbSession):
 
 @app.post("/login/")
 async def login(request: Request, db: DbSession, username: Annotated[str, Form()], password: Annotated[str, Form()]):
+    client_ip = request.client.host if request.client else "unknown"
+
+    # Login lockout check
+    now = time.monotonic()
+    attempts = failed_logins[client_ip]
+    attempts[:] = [t for t in attempts if now - t < LOGIN_LOCKOUT_SECONDS]
+    if len(attempts) >= LOGIN_LOCKOUT_THRESHOLD:
+        return render(request, "registration/login.html", {"error": "Too many failed attempts. Try again later."}, db, None)
+
     user = db.scalar(select(User).where(User.username == username))
     if not user or not verify_password(password, user.password_hash):
+        failed_logins[client_ip].append(now)
+        audit(db, user, "auth.login_failed", f"Failed login attempt for '{username}'.", "user", username, request)
+        db.commit()
         return render(request, "registration/login.html", {"error": "Invalid username or password."}, db)
+
+    # Clear failed attempts on success
+    failed_logins.pop(client_ip, None)
     response = redirect_to("/")
-    response.set_cookie("session", signer.dumps({"user_id": user.id}), httponly=True, secure=COOKIE_SECURE, samesite="lax")
+    response.set_cookie("session", signer.dumps({"user_id": user.id}), httponly=True, secure=COOKIE_SECURE, samesite="lax", max_age=28800)
+    audit(db, user, "auth.login", f"{user.username} logged in.", "user", user.username, request)
+    db.commit()
     return response
 
 
@@ -1018,6 +1047,10 @@ async def evidence_download(evidence_id: int, db: DbSession, user: UserDep):
     evidence = db.get(Evidence, evidence_id)
     if not evidence:
         raise HTTPException(status_code=404)
+    # Authorize: user must be able to view the parent alert
+    alert = db.get(Alert, evidence.alert_id)
+    if not alert:
+        raise HTTPException(status_code=404)
     path = UPLOAD_DIR / evidence.stored_name
     if not path.exists():
         raise HTTPException(status_code=404)
@@ -1081,7 +1114,8 @@ async def elastic_import(request: Request, db: DbSession, user: UserDep, raw_jso
 
 
 def api_key_valid(request: Request) -> bool:
-    return request.headers.get(N8N_API_HEADER) == N8N_API_KEY
+    provided = request.headers.get(N8N_API_HEADER, "")
+    return hmac.compare_digest(provided.encode(), N8N_API_KEY.encode())
 
 
 @app.post("/api/webhook/n8n")
@@ -1130,4 +1164,4 @@ async def n8n_log_webhook(request: Request, db: DbSession):
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("main:app", host="0.0.0.0", port=int(os.environ.get("PORT", "8080")), reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=int(os.environ.get("PORT", "8080")), reload=True, server_header=False)
