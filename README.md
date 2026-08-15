@@ -8,24 +8,17 @@
 
 A lightweight, self-hosted security operations alert tracker built with FastAPI. Designed for SOC teams that need role-based alert management, Elastic SIEM integration, and n8n workflow automation — without vendor lock-in.
 
-## Quick start
+## Quick start (Docker)
 
 ```bash
 git clone https://github.com/ethanx01-H/SOC-Tracker.git
 cd SOC-Tracker
-cp .env.example .env          # set N8N_API_KEY and APP_SECRET_KEY
-python3 -m pip install -r requirements.txt
-uvicorn main:app --host 0.0.0.0 --port 8080
+cp .env.example .env
+# Edit .env — set N8N_API_KEY and APP_SECRET_KEY
+docker compose up --build
 ```
 
 Open `http://localhost:8080` and log in with the demo accounts below.
-
-### Docker
-
-```bash
-cp .env.example .env          # set N8N_API_KEY and APP_SECRET_KEY
-docker compose up --build
-```
 
 ## Demo users
 
@@ -146,6 +139,20 @@ All settings are controlled via environment variables. See `.env.example` for th
 
 *Auto-generated if not set, but you should set explicit values for production and Docker Compose.
 
+## Development
+
+For local development without Docker:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+uvicorn main:app --reload --port 8080
+```
+
+The `--reload` flag auto-restarts on code changes. Do not use `--reload` in production.
+
 ## Project structure
 
 ```text
@@ -163,6 +170,8 @@ alembic/
   env.py                        Migration configuration
   versions/                     Database migrations
 data/                           Runtime SQLite database (gitignored)
+Dockerfile                      Production container (gunicorn + uvicorn)
+docker-compose.yml              One-command deployment
 ```
 
 ## Tech stack
@@ -171,6 +180,7 @@ data/                           Runtime SQLite database (gitignored)
 - **Frontend:** Jinja2 server-rendered HTML, vanilla CSS (light/dark)
 - **Auth:** Cookie-based sessions with PBKDF2-SHA256 password hashing
 - **Security:** CSRF protection, rate limiting, login lockout, security headers, audit logging
+- **Deployment:** Docker with gunicorn + uvicorn workers
 
 ## Future improvements
 
@@ -179,7 +189,7 @@ data/                           Runtime SQLite database (gitignored)
 - Richer SLA tracking with due dates, owner notifications, and breach history
 - Evidence management improvements (file previews, tagging, retention)
 - External integrations for SIEM enrichment, ticket export, and notifications
-- Deployment docs for HTTPS, backups, and production configuration
+- Deployment docs for HTTPS, reverse proxy, and backups
 - API documentation page with example payloads for n8n and Elastic imports
 
 ## Contributing
