@@ -4,6 +4,7 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green)
 ![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)
+![OWASP](https://img.shields.io/badge/OWASP%20Top%2010-Hardened-brightgreen)
 
 A lightweight, self-hosted security operations alert tracker built with FastAPI. Designed for SOC teams that need role-based alert management, Elastic SIEM integration, and n8n workflow automation — without vendor lock-in.
 
@@ -98,18 +99,50 @@ Share direct links to individual alerts in weekly or monthly reports:
 http://localhost:8080/r/SOC-000001/
 ```
 
+## Security
+
+Tested against OWASP Top 10 (2021). All categories pass.
+
+| OWASP Category                  | Status | Controls                                                  |
+|---------------------------------|--------|-----------------------------------------------------------|
+| A01 Broken Access Control       | Pass   | Auth required on all routes, RBAC on every action         |
+| A02 Cryptographic Failures      | Pass   | PBKDF2-SHA256 (240k iterations), timing-safe comparisons  |
+| A03 Injection                   | Pass   | SQLAlchemy ORM, Jinja2 auto-escaping, no command exec     |
+| A04 Insecure Design             | Pass   | Login lockout (5 failures / 5 min), password policy       |
+| A05 Security Misconfiguration   | Pass   | CSP, X-Frame-Options, HSTS, nosniff, Referrer-Policy     |
+| A06 Vulnerable Components       | Pass   | Current dependency versions with version ranges           |
+| A07 Auth Failures               | Pass   | 8h session expiry, failed login audit, lockout            |
+| A08 Integrity Failures          | Pass   | CSRF on all form endpoints, file upload validation        |
+| A09 Logging & Monitoring        | Pass   | Audit log for create/edit/assign/close/delete/auth events |
+| A10 SSRF                        | Pass   | No outbound request features                              |
+
+### Security headers
+
+All responses include:
+
+```
+X-Content-Type-Options: nosniff
+X-Frame-Options: DENY
+Referrer-Policy: strict-origin-when-cross-origin
+Permissions-Policy: camera=(), microphone=(), geolocation=()
+Content-Security-Policy: default-src 'self'; style-src 'self' 'unsafe-inline'; ...
+Strict-Transport-Security: max-age=31536000 (when COOKIE_SECURE=1)
+```
+
 ## Configuration
 
 All settings are controlled via environment variables. See `.env.example` for the full list.
 
-| Variable             | Required | Default                | Description                              |
-|----------------------|----------|------------------------|------------------------------------------|
-| `N8N_API_KEY`        | Yes*     | auto-generated         | Shared secret for n8n webhook API        |
-| `APP_SECRET_KEY`     | Yes*     | auto-generated         | Cookie signing key (must persist)        |
-| `SQLITE_PATH`        | No       | `data/fastapi.sqlite3` | SQLite database path                     |
-| `COOKIE_SECURE`      | No       | `0`                    | Set to `1` for HTTPS-only cookies        |
-| `RATE_LIMIT_REQUESTS`| No       | `120`                  | Max requests per window                  |
-| `RATE_LIMIT_WINDOW`  | No       | `60`                   | Rate limit window in seconds             |
+| Variable                 | Required | Default                | Description                              |
+|--------------------------|----------|------------------------|------------------------------------------|
+| `N8N_API_KEY`            | Yes*     | auto-generated         | Shared secret for n8n webhook API        |
+| `APP_SECRET_KEY`         | Yes*     | auto-generated         | Cookie signing key (must persist)        |
+| `SQLITE_PATH`            | No       | `data/fastapi.sqlite3` | SQLite database path                     |
+| `COOKIE_SECURE`          | No       | `0`                    | Set to `1` for HTTPS-only cookies        |
+| `RATE_LIMIT_REQUESTS`    | No       | `120`                  | Max requests per window                  |
+| `RATE_LIMIT_WINDOW`      | No       | `60`                   | Rate limit window in seconds             |
+| `LOGIN_LOCKOUT_THRESHOLD`| No       | `5`                    | Failed login attempts before lockout     |
+| `LOGIN_LOCKOUT_SECONDS`  | No       | `300`                  | Lockout duration in seconds              |
 
 *Auto-generated if not set, but you should set explicit values for production and Docker Compose.
 
@@ -137,7 +170,7 @@ data/                           Runtime SQLite database (gitignored)
 - **Backend:** FastAPI + SQLAlchemy + Alembic (SQLite)
 - **Frontend:** Jinja2 server-rendered HTML, vanilla CSS (light/dark)
 - **Auth:** Cookie-based sessions with PBKDF2-SHA256 password hashing
-- **Security:** CSRF protection, rate limiting, secure file uploads
+- **Security:** CSRF protection, rate limiting, login lockout, security headers, audit logging
 
 ## Future improvements
 
