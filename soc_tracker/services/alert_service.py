@@ -1,0 +1,196 @@
+"""Alert business logic and helper functions."""
+
+import csv
+import io
+import json
+import logging
+import math
+import secrets
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from urllib.parse import urlencode
+
+from sqlalchemy import func, or_, select
+from sqlalchemy.orm import Session
+
+from ..config import UPLOAD_DIR
+from ..models import Alert, AlertEvent, Evidence, User, generate_alert_id
+
+logger = logging.getLogger("soc_tracker.alert_service")
+
+
+def create_alert(db: Session, values: dict, user: User | None = None) -> Alert:
+    """Create a new alert with event logging."""
+    iocs = values.pop("iocs", None) or []
+    actor = user or values.get("created_by")
+    alert = Alert(alert_id=generate_alert_id(), **values)
+    alert.iocs = iocs
+    if user:
+        alert.created_by = user
+        alert.updated_by = user
+        if alert.status == "Escalated":
+            alert.escalated_by = user
+    db.add(alert)
+    db.flush()
+    db.add(AlertEvent(
+        alert=alert,
+        event_type="created",
+        actor=actor,
+        message=f"{actor.username if actor else 'n8n'} created {alert.alert_id}."
+    ))
+    db.commit()
+    db.refresh(alert)
+    logger.info("Alert %s created by %s", alert.alert_id, actor.username if actor else "system")
+    return alert
+
+
+def normalized_datetime(value: datetime) -> datetime:
+    """Ensure datetime has UTC timezone."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
+
+
+def sla_status(alert: Alert) -> dict[str, str]:
+    """Calculate SLA status for an alert."""
+    if alert.status == "Closed":
+        return {"label": "Closed", "class": "sla-closed"}
+    due_at = normalized_datetime(alert.created_at) + timedelta(hours=alert.sla_hours)
+    remaining = due_at - datetime.now(timezone.utc)
+    if remaining.total_seconds() < 0:
+        return {"label": "Overdue", "class": "sla-overdue"}
+    hours = max(1, int((remaining.total_seconds() + 3599) // 3600))
+    if hours <= 2:
+        return {"label": f"Due in {hours}h", "class": "sla-due-soon"}
+    return {"label": f"Due in {hours}h", "class": "sla-ok"}
+
+
+def filtered_alerts(db: Session, request) -> list[Alert]:
+    """Get alerts filtered by query parameters."""
+    query = select(Alert).order_by(Alert.created_at.desc())
+    search = (request.query_params.get("q") or "").strip()
+    severity = request.query_params.get("severity") or ""
+    alert_status = request.query_params.get("status") or ""
+    source = request.query_params.get("source") or ""
+    analyst = request.query_params.get("analyst") or ""
+    sla = request.query_params.get("sla") or ""
+
+    if search:
+        like = f"%{search}%"
+        evidence_alert_ids = select(Evidence.alert_id).where(Evidence.original_name.ilike(like))
+        query = query.where(or_(
+            Alert.alert_id.ilike(like),
+            Alert.title.ilike(like),
+            Alert.description.ilike(like),
+            Alert.asset.ilike(like),
+            Alert.source.ilike(like),
+            Alert.analyst.ilike(like),
+            Alert.iocs_json.ilike(like),
+            Alert.events.any(AlertEvent.message.ilike(like)),
+            Alert.id.in_(evidence_alert_ids),
+        ))
+    if severity:
+        query = query.where(Alert.severity == severity)
+    if alert_status:
+        query = query.where(Alert.status == alert_status)
+    if source:
+        query = query.where(Alert.source == source)
+    if analyst:
+        query = query.where(Alert.analyst == analyst)
+
+    alerts = list(db.scalars(query))
+
+    if sla == "overdue":
+        alerts = [a for a in alerts if sla_status(a)["class"] == "sla-overdue"]
+    elif sla == "closed":
+        alerts = [a for a in alerts if a.status == "Closed"]
+    elif sla == "due-soon":
+        alerts = [a for a in alerts if sla_status(a)["class"] == "sla-due-soon"]
+    elif sla == "on-track":
+        alerts = [a for a in alerts if sla_status(a)["class"] == "sla-ok"]
+
+    return alerts
+
+
+def filtered_alerts_paginated(db: Session, request, page: int = 1, per_page: int = 50) -> dict:
+    """Get paginated alerts with filters."""
+    all_alerts = filtered_alerts(db, request)
+    total = len(all_alerts)
+    total_pages = max(1, math.ceil(total / per_page))
+    page = max(1, min(page, total_pages))
+    start = (page - 1) * per_page
+    end = start + per_page
+
+    return {
+        "alerts": all_alerts[start:end],
+        "page": page,
+        "per_page": per_page,
+        "total": total,
+        "total_pages": total_pages,
+    }
+
+
+def form_values(form: dict) -> dict:
+    """Extract and validate alert form values."""
+    iocs_text = form.get("iocs_text", "")
+    title = form.get("title", "").strip()
+
+    # Input validation
+    if len(title) > 180:
+        raise ValueError("Title must be 180 characters or less.")
+
+    description = form.get("description", "").strip()
+    if len(description) > 10000:
+        raise ValueError("Description must be 10000 characters or less.")
+
+    source = form.get("source", "Manual").strip() or "Manual"
+    if len(source) > 80:
+        raise ValueError("Source must be 80 characters or less.")
+
+    tactic = form.get("tactic", "Unknown").strip() or "Unknown"
+    if len(tactic) > 100:
+        raise ValueError("Tactic must be 100 characters or less.")
+
+    asset = form.get("asset", "Unknown").strip() or "Unknown"
+    if len(asset) > 160:
+        raise ValueError("Asset must be 160 characters or less.")
+
+    return {
+        "title": title,
+        "description": description,
+        "source": source,
+        "severity": form.get("severity", "Medium"),
+        "status": form.get("status", "New"),
+        "analyst": form.get("analyst", "Unassigned").strip() or "Unassigned",
+        "tactic": tactic,
+        "asset": asset,
+        "iocs": [item.strip() for item in iocs_text.split(",") if item.strip()],
+        "sla_hours": int(form.get("sla_hours") or 8),
+    }
+
+
+def export_csv(alerts: list[Alert]) -> str:
+    """Export alerts to CSV string."""
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "alert_id", "title", "severity", "status", "source",
+        "analyst", "asset", "tactic", "sla_hours", "sla_status",
+        "created_at", "updated_at"
+    ])
+    for alert in alerts:
+        writer.writerow([
+            alert.alert_id,
+            alert.title,
+            alert.severity,
+            alert.status,
+            alert.source,
+            alert.analyst,
+            alert.asset,
+            alert.tactic,
+            alert.sla_hours,
+            sla_status(alert)["label"],
+            alert.created_at.isoformat(),
+            alert.updated_at.isoformat(),
+        ])
+    return output.getvalue()

@@ -180,7 +180,25 @@ The `--reload` flag auto-restarts on code changes. Do not use `--reload` in prod
 ## Project structure
 
 ```text
-main.py                         FastAPI app (routes, models, auth, middleware)
+main.py                         FastAPI app entry point (startup, migrations, seeding)
+soc_tracker/
+  __init__.py
+  config.py                     Environment variables and settings
+  models.py                     SQLAlchemy models (User, Alert, Evidence, AuditLog)
+  auth.py                       Password hashing, session management, RBAC
+  middleware.py                 Security middleware (rate limiting, CSRF, headers)
+  utils.py                      Template rendering, flash messages, audit logging
+  routes/
+    __init__.py
+    auth_routes.py              Login/logout endpoints
+    alert_routes.py             Alert CRUD, assignment, escalation, notes
+    admin_routes.py             User management and audit log
+    evidence_routes.py          Evidence upload/download
+    webhook_routes.py           n8n webhook and Elastic import
+  services/
+    __init__.py
+    alert_service.py            Alert business logic, filtering, pagination
+    chart_service.py            Dashboard pie chart generation
 alerts/
   __init__.py
   elastic.py                    Elastic/Kibana JSON parser
@@ -190,6 +208,11 @@ templates/                      Jinja2 HTML templates
   admin/                        User management, audit log
   registration/                 Login page
 static/alerts/app.css           Stylesheet (light/dark theme)
+tests/                          Automated tests
+  conftest.py                   Pytest fixtures
+  test_elastic.py               Elastic parser tests (43 tests)
+  test_auth.py                  Auth and RBAC tests (41 tests)
+  test_alert_service.py         Alert service tests (19 tests)
 alembic/
   env.py                        Migration configuration
   versions/                     Database migrations
@@ -200,15 +223,30 @@ docker-compose.yml              One-command deployment
 
 ## Tech stack
 
-- **Backend:** FastAPI + SQLAlchemy + Alembic (SQLite)
+- **Backend:** FastAPI + SQLAlchemy + Alembic (SQLite with WAL mode)
 - **Frontend:** Jinja2 server-rendered HTML, vanilla CSS (light/dark)
 - **Auth:** Cookie-based sessions with PBKDF2-SHA256 password hashing
 - **Security:** CSRF protection, rate limiting, login lockout, security headers, audit logging
 - **Deployment:** Docker with gunicorn + uvicorn workers
+- **Testing:** pytest with 103 automated tests
+
+## Testing
+
+Run the test suite:
+
+```bash
+pip install pytest pytest-asyncio
+pytest tests/ -v
+```
+
+Test coverage includes:
+- Elastic/Kibana JSON parser (43 tests)
+- Authentication and RBAC permissions (41 tests)
+- Alert service business logic (19 tests)
 
 ## Future improvements
 
-- Automated tests for alert workflows, role permissions, imports, and webhooks
+- ~~Automated tests for alert workflows, role permissions, imports, and webhooks~~ ✅ Done
 - Dashboard date-range filters and trend charts for weekly/monthly reporting
 - Richer SLA tracking with due dates, owner notifications, and breach history
 - Evidence management improvements (file previews, tagging, retention)

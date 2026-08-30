@@ -1,0 +1,125 @@
+"""Admin routes for user management and audit log."""
+
+import logging
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi.responses import HTMLResponse
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from ..auth import can_manage_users, hash_password, validate_password_strength, require_user, UserDep
+from ..config import ROLES
+from ..models import AuditLog, User
+from ..utils import audit, redirect_to, render
+
+logger = logging.getLogger("soc_tracker.admin_routes")
+
+router = APIRouter()
+
+
+def get_db():
+    from ..models import SessionLocal
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+DbSession = Annotated[Session, Depends(get_db)]
+
+
+@router.get("/admin/users/", response_class=HTMLResponse)
+async def user_admin(request: Request, db: DbSession, user: UserDep):
+    if not can_manage_users(user):
+        raise HTTPException(status_code=403)
+    users = list(db.scalars(select(User).order_by(User.username)))
+    return render(request, "admin/users.html", {"users": users, "error": None}, db, user)
+
+
+@router.post("/admin/users/")
+async def user_create(
+    request: Request,
+    db: DbSession,
+    user: UserDep,
+    username: Annotated[str, Form()],
+    password: Annotated[str, Form()],
+    role: Annotated[str, Form()],
+):
+    if not can_manage_users(user):
+        raise HTTPException(status_code=403)
+    username = username.strip()
+    users = list(db.scalars(select(User).order_by(User.username)))
+    if role not in ROLES:
+        return render(request, "admin/users.html", {"users": users, "error": "Select a valid role."}, db, user)
+    if len(username) < 2:
+        return render(request, "admin/users.html", {"users": users, "error": "Username must be at least 2 characters."}, db, user)
+    if len(username) > 80:
+        return render(request, "admin/users.html", {"users": users, "error": "Username must be 80 characters or less."}, db, user)
+    password_error = validate_password_strength(password)
+    if password_error:
+        return render(request, "admin/users.html", {"users": users, "error": password_error}, db, user)
+    if db.scalar(select(User).where(User.username == username)):
+        return render(request, "admin/users.html", {"users": users, "error": f"User {username} already exists."}, db, user)
+    db.add(User(username=username, password_hash=hash_password(password), role=role, is_admin=role == "L3"))
+    audit(db, user, "user.created", f"Created user {username} with role {role}.", "user", username, request)
+    db.commit()
+    logger.info("User '%s' created with role %s by %s", username, role, user.username)
+    return redirect_to("/admin/users/", f"Created user {username}.")
+
+
+@router.post("/admin/users/{user_id}/role/")
+async def user_role_update(
+    request: Request,
+    user_id: int,
+    db: DbSession,
+    user: UserDep,
+    role: Annotated[str, Form()],
+):
+    if not can_manage_users(user):
+        raise HTTPException(status_code=403)
+    target = db.get(User, user_id)
+    if not target:
+        raise HTTPException(status_code=404)
+    if role not in ROLES:
+        return redirect_to("/admin/users/", "Select a valid role.")
+    if target.id == user.id and role != "L3":
+        return redirect_to("/admin/users/", "You cannot demote your active admin account.")
+    target.role = role
+    target.is_admin = role == "L3"
+    audit(db, user, "user.role_updated", f"Updated {target.username} to {role}.", "user", target.id, request)
+    db.commit()
+    logger.info("User '%s' role updated to %s by %s", target.username, role, user.username)
+    return redirect_to("/admin/users/", f"Updated {target.username} to {role}.")
+
+
+@router.post("/admin/users/{user_id}/password/")
+async def user_password_reset(
+    request: Request,
+    user_id: int,
+    db: DbSession,
+    user: UserDep,
+    password: Annotated[str, Form()],
+):
+    if not can_manage_users(user):
+        raise HTTPException(status_code=403)
+    target = db.get(User, user_id)
+    if not target:
+        raise HTTPException(status_code=404)
+    password_error = validate_password_strength(password)
+    if password_error:
+        return redirect_to("/admin/users/", password_error)
+    target.password_hash = hash_password(password)
+    audit(db, user, "user.password_reset", f"Reset password for {target.username}.", "user", target.id, request)
+    db.commit()
+    logger.info("Password reset for '%s' by %s", target.username, user.username)
+    return redirect_to("/admin/users/", f"Reset password for {target.username}.")
+
+
+@router.get("/admin/audit/", response_class=HTMLResponse)
+async def audit_log_page(request: Request, db: DbSession, user: UserDep):
+    if not can_manage_users(user):
+        raise HTTPException(status_code=403)
+    logs = list(db.scalars(select(AuditLog).order_by(AuditLog.created_at.desc()).limit(200)))
+    return render(request, "admin/audit.html", {"logs": logs}, db, user)
