@@ -135,36 +135,6 @@ curl -X POST http://localhost:8080/api/webhook/n8n/logs/ \
   -d '{"alert_id":"#1","message":"GeoIP lookup completed.","workflow":"SOC enrichment"}'
 ```
 
-## Security
-
-Security controls are implemented in the application, but this project has not had an independent security assessment. Do not interpret the listed controls as OWASP certification or production assurance.
-
-| OWASP Category                  | Status | Controls                                                  |
-|---------------------------------|--------|-----------------------------------------------------------|
-| A01 Broken Access Control       | Implemented | Authentication and role checks on protected actions |
-| A02 Cryptographic Failures      | Implemented | PBKDF2-SHA256 password hashing and signed sessions  |
-| A03 Injection                   | Implemented | SQLAlchemy ORM and escaped templates                |
-| A04 Insecure Design             | Implemented | Login lockout, password policy, bounded requests     |
-| A05 Security Misconfiguration   | Implemented | CSP, frame protection, HSTS in secure-cookie mode    |
-| A06 Vulnerable Components       | Review      | Dependency ranges are not a vulnerability assessment |
-| A07 Auth Failures               | Implemented | Timed sessions, failed-login audit, lockout           |
-| A08 Integrity Failures          | Implemented | CSRF checks and evidence upload validation            |
-| A09 Logging & Monitoring        | Review | Application audit events; export to protected external storage for production |
-| A10 SSRF                        | Implemented | No outbound request features                          |
-
-### Security headers
-
-All responses include:
-
-```
-X-Content-Type-Options: nosniff
-X-Frame-Options: DENY
-Referrer-Policy: strict-origin-when-cross-origin
-Permissions-Policy: camera=(), microphone=(), geolocation=()
-Content-Security-Policy: default-src 'self'; style-src 'self' 'unsafe-inline'; ...
-Strict-Transport-Security: max-age=31536000 (when COOKIE_SECURE=1)
-```
-
 ## Configuration
 
 All settings are controlled via environment variables. See `.env.example` for the full list.
@@ -195,50 +165,6 @@ uvicorn main:app --reload --port 8080
 ```
 
 The `--reload` flag auto-restarts on code changes. Do not use `--reload` in production.
-
-## Project structure
-
-```text
-main.py                         FastAPI app entry point (startup, migrations, seeding)
-soc_tracker/
-  __init__.py
-  config.py                     Environment variables and settings
-  models.py                     SQLAlchemy models (User, Alert, Evidence, AuditLog)
-  auth.py                       Password hashing, session management, RBAC
-  middleware.py                 Security middleware (rate limiting, CSRF, headers)
-  utils.py                      Template rendering, flash messages, audit logging
-  routes/
-    __init__.py
-    auth_routes.py              Login/logout endpoints
-    alert_routes.py             Alert CRUD, assignment, escalation, notes
-    admin_routes.py             User management and audit log
-    evidence_routes.py          Evidence upload/download
-    webhook_routes.py           n8n webhook and Elastic import
-  services/
-    __init__.py
-    alert_service.py            Alert business logic, filtering, pagination
-    chart_service.py            Dashboard pie chart generation
-alerts/
-  __init__.py
-  elastic.py                    Elastic/Kibana JSON parser
-templates/                      Jinja2 HTML templates
-  base.html                     Layout with sidebar navigation
-  alerts/                       Dashboard, list, detail, form, import
-  admin/                        User management, audit log
-  registration/                 Login page
-static/alerts/app.css           Stylesheet (light/dark theme)
-tests/                          Automated tests
-  conftest.py                   Pytest fixtures
-  test_elastic.py               Elastic parser tests (43 tests)
-  test_auth.py                  Auth and RBAC tests (41 tests)
-  test_alert_service.py         Alert service tests (19 tests)
-alembic/
-  env.py                        Migration configuration
-  versions/                     Database migrations
-data/                           Runtime SQLite database (gitignored)
-Dockerfile                      Production container (gunicorn + uvicorn)
-docker-compose.yml              One-command deployment
-```
 
 ## Tech stack
 
