@@ -71,7 +71,11 @@ The command prompts for the password twice. Create L1/L2 users from the administ
 
 This compose setup binds to localhost for review and defaults to non-secure cookies so it works over local HTTP. For production, set `APP_ENV=production` and `COOKIE_SECURE=1`, put the app behind HTTPS, and restrict access to the proxy/network. Do not expose port 8080 directly to the internet. [nginx.conf](nginx.conf) is an example HTTPS reverse proxy configuration; update its hostname and certificate paths before enabling it.
 
-The default SQLite deployment is a single-instance pilot setup. Back up the Docker volume and evidence files together, test restores, and export audit logs to protected external storage for production use. Request limiting and login lockout are in process memory; keep one worker and use proxy-level limits unless a shared limiter is configured.
+### Data storage and retention
+
+The local/demo app stores alert, account, event, and audit records in `data/fastapi.sqlite3` and evidence files in `data/evidence/`. In Docker, both are under `/app/data` in the `soc_tracker_data` volume. Alert deletion is disabled, and the app does not automatically expire records or evidence; this is persistence, not a guaranteed retention policy. Removing the Docker volume or losing the host can still destroy the data.
+
+The current SQLite setup is for a single-instance pilot and does not provide a production two-year retention guarantee. Before production, use a managed database with durable backups and a tested restore process, and durable evidence storage with a lifecycle/retention policy that keeps incident records and evidence for at least 730 days. Protect audit exports separately (ideally immutable storage), monitor backup/retention jobs, and verify restores. Keep database, evidence, and audit retention aligned; do not enable automatic deletion before the required retention period. Request limiting and login lockout are in process memory; keep one worker and use proxy-level limits unless a shared limiter is configured.
 
 ## Screenshots
 
@@ -81,7 +85,7 @@ The default SQLite deployment is a single-instance pilot setup. Back up the Dock
 
 ### Dashboard
 
-SOC dashboard with alert counts, pie charts, and filtered alert queue.
+SOC dashboard with alert counts, charts, and filtered alert queue.
 
 ![Dashboard](docs/screenshots/dashboard.png)
 
@@ -104,6 +108,7 @@ Create users, manage roles (L1/L2/L3), and reset passwords.
 - Create, edit, escalate, assign, and close alerts with resolution summaries
 - Sequential ticket numbers (`#1`, `#2`, ...) that remain stable after migration
 - Ticket workflow: Open when unassigned, Pending while awaiting analysis, WIP during active analysis, and Closed after resolution; analysts can assign open tickets to themselves
+- L1, L2, and L3 users can assign unassigned Open tickets to themselves
 - Optional IOCs when creating tickets; close summaries have no application-level word-count limit
 - Filter by severity, status, search terms; CSV export of filtered results
 - Evidence file uploads with SHA-256 integrity tracking

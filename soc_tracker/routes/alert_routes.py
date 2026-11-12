@@ -131,7 +131,7 @@ async def alert_detail(request: Request, pk: int, db: Session = Depends(get_db),
         "alert": alert,
         "can_edit": can_edit_alert(user, alert),
         "can_escalate": can_escalate_alert(user) and alert.status != "Closed" and alert.escalated_by_id is None,
-        "can_take": alert.status == "Open" and alert.assigned_to_id is None and user_role(user) in {"L1", "L2"},
+        "can_take": alert.status == "Open" and alert.assigned_to_id is None and user_role(user) in {"L1", "L2", "L3"},
         "status_choices": ["Open", "WIP", "Pending"],
         "can_assign": can_assign_alert(user),
         "assignable_users": assignable_users,
@@ -216,7 +216,7 @@ async def alert_take(request: Request, pk: int, db: Session = Depends(get_db), u
     alert = db.get(Alert, pk)
     if not alert:
         raise HTTPException(status_code=404)
-    if user_role(user) not in {"L1", "L2"}:
+    if user_role(user) not in {"L1", "L2", "L3"}:
         raise HTTPException(status_code=403)
     if alert.status != "Open" or alert.assigned_to_id is not None:
         raise HTTPException(status_code=409, detail="Only unassigned Open tickets can be taken.")
