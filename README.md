@@ -107,6 +107,7 @@ Create users, manage roles (L1/L2/L3), and reset passwords.
 - SOC dashboard with source/analyst/tactic pie charts and alert counts
 - Create, edit, escalate, assign, and close alerts with resolution summaries
 - Sequential ticket numbers (`#1`, `#2`, ...) that remain stable after migration
+- Severity scale: `0 - Critical`, `1 - High`, `2 - Medium`, `3 - Low`, `4 - Informational`
 - Ticket workflow: Open when unassigned, Pending while awaiting analysis, WIP during active analysis, and Closed after resolution; analysts can assign open tickets to themselves
 - L1, L2, and L3 users can assign unassigned Open tickets to themselves
 - Optional IOCs when creating tickets; close summaries have no application-level word-count limit

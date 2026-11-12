@@ -26,7 +26,7 @@
       <label for="severity">Severity</label>
       <select id="severity" name="severity">
         {% for severity in severities %}
-          <option value="{{ severity }}" {% if form.get('severity', 'Medium') == severity %}selected{% endif %}>{{ severity }}</option>
+          <option value="{{ severity }}" {% if form.get('severity', 'Medium') == severity %}selected{% endif %}>{{ severity_labels[severity] }}</option>
         {% endfor %}
       </select>
     </p>

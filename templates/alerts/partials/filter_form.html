@@ -3,7 +3,7 @@
   <select name="severity">
     <option value="">All severities</option>
     {% for severity in severities %}
-      <option value="{{ severity }}" {% if request.query_params.get('severity') == severity %}selected{% endif %}>{{ severity }}</option>
+      <option value="{{ severity }}" {% if request.query_params.get('severity') == severity %}selected{% endif %}>{{ severity_labels[severity] }}</option>
     {% endfor %}
   </select>
   <select name="status">

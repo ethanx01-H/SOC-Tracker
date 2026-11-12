@@ -30,9 +30,16 @@ MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", str(20 * 1024 * 1024))
 ALLOWED_EVIDENCE_EXTENSIONS = {".xlsx", ".csv", ".jpg", ".jpeg", ".png", ".txt", ".log", ".json", ".pdf", ".pcap", ".pcapng"}
 
 STATUSES = ["Open", "Pending", "WIP", "Closed"]
-SEVERITIES = ["Critical", "High", "Medium", "Low"]
+SEVERITIES = ["Critical", "High", "Medium", "Low", "Informational"]
+SEVERITY_LABELS = {
+    "Critical": "0 - Critical",
+    "High": "1 - High",
+    "Medium": "2 - Medium",
+    "Low": "3 - Low",
+    "Informational": "4 - Informational",
+}
 ROLES = ["L1", "L2", "L3"]
-ALEMBIC_HEAD = "0004_password_change_policy"
+ALEMBIC_HEAD = "0005_informational_severity"
 
 LOGIN_LOCKOUT_THRESHOLD = int(os.environ.get("LOGIN_LOCKOUT_THRESHOLD", "5"))
 LOGIN_LOCKOUT_SECONDS = int(os.environ.get("LOGIN_LOCKOUT_SECONDS", "300"))

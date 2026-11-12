@@ -55,7 +55,7 @@ class Alert(Base):
     title: Mapped[str] = mapped_column(String(180))
     description: Mapped[str] = mapped_column(Text, default="")
     source: Mapped[str] = mapped_column(String(80), default="Manual")
-    severity: Mapped[str] = mapped_column(String(10), default="Medium")
+    severity: Mapped[str] = mapped_column(String(20), default="Medium")
     status: Mapped[str] = mapped_column(String(20), default="Open")
     analyst: Mapped[str] = mapped_column(String(80), default="Unassigned")
     tactic: Mapped[str] = mapped_column(String(100), default="Unknown")

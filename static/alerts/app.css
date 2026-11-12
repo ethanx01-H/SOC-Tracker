@@ -365,6 +365,11 @@ p {
   font-weight: 800;
 }
 
+.severity-Informational {
+  color: var(--muted);
+  font-weight: 800;
+}
+
 .sla-ok {
   background: #e8f5ee;
   color: #146c43;

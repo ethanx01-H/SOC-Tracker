@@ -17,7 +17,7 @@ from .auth import (
     signer,
     user_role,
 )
-from .config import BASE_DIR, COOKIE_SECURE, ROLES, SEVERITIES, STATUSES
+from .config import BASE_DIR, COOKIE_SECURE, ROLES, SEVERITIES, SEVERITY_LABELS, STATUSES
 from .models import AuditLog, User
 from .services.alert_service import sla_status
 
@@ -62,6 +62,7 @@ def base_context(request: Request, user: User | None, db: Session) -> dict:
         "messages": [message] if message else [],
         "statuses": STATUSES,
         "severities": SEVERITIES,
+        "severity_labels": SEVERITY_LABELS,
         "roles": ROLES,
         "sla_status": sla_status,
         "csrf_token": csrf_token_for(request),
