@@ -14,9 +14,10 @@ def records_from(value):
         return records
     if not isinstance(value, dict):
         return []
-    if isinstance(value.get("hits", {}).get("hits"), list):
+    hits = value.get("hits")
+    if isinstance(hits, dict) and isinstance(hits.get("hits"), list):
         records = []
-        for hit in value["hits"]["hits"]:
+        for hit in hits["hits"]:
             records.extend(records_from(hit))
         return records
     if isinstance(value.get("_source"), dict):

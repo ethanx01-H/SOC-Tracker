@@ -9,7 +9,7 @@ from urllib.parse import parse_qs
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 
-from .config import COOKIE_SECURE, RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW
+from .config import COOKIE_SECURE, MAX_REQUEST_BYTES, RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW
 
 logger = logging.getLogger("soc_tracker.middleware")
 
@@ -22,6 +22,14 @@ async def security_middleware(request: Request, call_next):
     now = time.monotonic()
     client_ip = request.client.host if request.client else "unknown"
 
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > MAX_REQUEST_BYTES:
+                return JSONResponse({"ok": False, "error": "request body too large"}, status_code=413)
+        except ValueError:
+            return JSONResponse({"ok": False, "error": "invalid content length"}, status_code=400)
+
     # Rate limiting
     attempts = rate_limits[client_ip]
     while attempts and now - attempts[0] > RATE_LIMIT_WINDOW:
@@ -30,6 +38,13 @@ async def security_middleware(request: Request, call_next):
         logger.warning("Rate limit exceeded for %s", client_ip)
         return JSONResponse({"ok": False, "error": "rate limit exceeded"}, status_code=429)
     attempts.append(now)
+    # Bound memory use when clients rotate source addresses.
+    if len(rate_limits) > 10000:
+        for key in list(rate_limits)[:2000]:
+            rate_limits.pop(key, None)
+    if len(failed_logins) > 10000:
+        for key in list(failed_logins)[:2000]:
+            failed_logins.pop(key, None)
 
     # CSRF check — skip only for webhook API endpoints
     if request.method in {"POST", "PUT", "PATCH", "DELETE"} and not request.url.path.startswith("/api/webhook"):
@@ -39,12 +54,16 @@ async def security_middleware(request: Request, call_next):
         content_type = request.headers.get("content-type", "")
 
         if "application/x-www-form-urlencoded" in content_type:
-            body = await request.body()
+            body = await _read_bounded_body(request)
+            if body is None:
+                return JSONResponse({"ok": False, "error": "request body too large"}, status_code=413)
             parsed = parse_qs(body.decode("utf-8", errors="ignore"))
             values = parsed.get("csrf_token", [])
             form_token = values[0] if values else None
         elif "multipart/form-data" in content_type:
-            body = await request.body()
+            body = await _read_bounded_body(request)
+            if body is None:
+                return JSONResponse({"ok": False, "error": "request body too large"}, status_code=413)
             match = re.search(rb'name="csrf_token"\r\n\r\n([^\r\n]+)', body)
             form_token = match.group(1).decode("utf-8", errors="ignore") if match else None
 
@@ -74,3 +93,22 @@ async def security_middleware(request: Request, call_next):
         del response.headers["server"]
 
     return response
+
+
+async def _read_bounded_body(request: Request) -> bytes | None:
+    """Read a form body under the configured cap and make it available to the route."""
+    parts = []
+    total = 0
+    async for chunk in request.stream():
+        total += len(chunk)
+        if total > MAX_REQUEST_BYTES:
+            return None
+        parts.append(chunk)
+    body = b"".join(parts)
+    request._body = body
+
+    async def receive():
+        return {"type": "http.request", "body": body, "more_body": False}
+
+    request._receive = receive
+    return body

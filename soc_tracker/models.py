@@ -155,4 +155,4 @@ class AuditLog(Base):
 
 def generate_alert_id() -> str:
     """Generate a unique alert ID using UUID to prevent race conditions."""
-    return f"SOC-{uuid.uuid4().hex[:8].upper()}"
+    return f"SOC-{uuid.uuid4().hex[:12].upper()}"

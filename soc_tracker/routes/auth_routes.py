@@ -9,36 +9,25 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..auth import current_user, hash_password, signer, verify_password
-from ..config import COOKIE_SECURE, LOGIN_LOCKOUT_SECONDS, LOGIN_LOCKOUT_THRESHOLD
+from ..auth import current_user, hash_password, signer, session_stamp, verify_password
+from ..config import COOKIE_SECURE, LOGIN_LOCKOUT_SECONDS, LOGIN_LOCKOUT_THRESHOLD, SESSION_TTL_SECONDS
+from ..dependencies import get_db
 from ..middleware import failed_logins
 from ..models import AuditLog, User
-from ..utils import base_context, flash, redirect_to, render
+from ..utils import flash, redirect_to, render
 
 logger = logging.getLogger("soc_tracker.auth_routes")
 
 router = APIRouter()
 
 
-def get_db():
-    from ..models import SessionLocal
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-DbSession = Annotated[Session, Depends(get_db)]
-
-
 @router.get("/login/", response_class=HTMLResponse)
-async def login_page(request: Request, db: DbSession):
+async def login_page(request: Request, db: Session = Depends(get_db)):
     return render(request, "registration/login.html", {"error": None}, db)
 
 
 @router.post("/login/")
-async def login(request: Request, db: DbSession, username: Annotated[str, Form()], password: Annotated[str, Form()]):
+async def login(request: Request, username: Annotated[str, Form()], password: Annotated[str, Form()], db: Session = Depends(get_db)):
     client_ip = request.client.host if request.client else "unknown"
 
     # Login lockout check
@@ -69,11 +58,11 @@ async def login(request: Request, db: DbSession, username: Annotated[str, Form()
     response = redirect_to("/")
     response.set_cookie(
         "session",
-        signer.dumps({"user_id": user.id}),
+        signer.dumps({"user_id": user.id, "session_stamp": session_stamp(user)}),
         httponly=True,
         secure=COOKIE_SECURE,
         samesite="lax",
-        max_age=28800,
+        max_age=SESSION_TTL_SECONDS,
     )
     db.add(AuditLog(
         actor=user,

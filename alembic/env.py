@@ -1,4 +1,5 @@
 from logging.config import fileConfig
+import os
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
@@ -6,6 +7,7 @@ from sqlalchemy import engine_from_config, pool
 from main import Base
 
 config = context.config
+config.set_main_option("sqlalchemy.url", f"sqlite:///{os.environ.get('SQLITE_PATH', 'data/fastapi.sqlite3')}")
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

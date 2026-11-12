@@ -1,20 +1,28 @@
 """Authentication, password hashing, and RBAC utilities."""
 
 import logging
+import hmac
 import re
 import secrets
-from hashlib import pbkdf2_hmac
+from hashlib import pbkdf2_hmac, sha256
+from typing import Annotated
 
-from fastapi import HTTPException, Request, status
-from itsdangerous import BadSignature, URLSafeSerializer
+from fastapi import Depends, HTTPException, Request, status
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from sqlalchemy.orm import Session
 
-from .config import SECRET_KEY
+from .config import SECRET_KEY, SESSION_TTL_SECONDS
+from .dependencies import get_db
 from .models import User
 
 logger = logging.getLogger("soc_tracker.auth")
 
-signer = URLSafeSerializer(SECRET_KEY, salt="soc-alert-tracker")
+signer = URLSafeTimedSerializer(SECRET_KEY, salt="soc-alert-tracker")
+
+
+def session_stamp(user: User) -> str:
+    """Tie sessions to the current password hash without exposing that hash in cookies."""
+    return hmac.new(SECRET_KEY.encode(), user.password_hash.encode(), sha256).hexdigest()
 
 
 def hash_password(password: str, salt: str | None = None) -> str:
@@ -54,13 +62,16 @@ def current_user(request: Request, db: Session) -> User | None:
     if not raw:
         return None
     try:
-        data = signer.loads(raw)
-    except BadSignature:
+        data = signer.loads(raw, max_age=SESSION_TTL_SECONDS)
+    except (BadSignature, SignatureExpired):
         return None
-    return db.get(User, data.get("user_id"))
+    user = db.get(User, data.get("user_id"))
+    if not user or not hmac.compare_digest(data.get("session_stamp", ""), session_stamp(user)):
+        return None
+    return user
 
 
-async def require_user(request: Request, db: Session) -> User:
+async def require_user(request: Request, db: Session = Depends(get_db)) -> User:
     """Dependency that requires authentication. Redirects to login if not authenticated."""
     user = current_user(request, db)
     if user:
@@ -106,3 +117,6 @@ def assignable_roles_for(user: User) -> list[str]:
     if role == "L2":
         return ["L1"]
     return []
+
+
+UserDep = Annotated[User, Depends(require_user)]

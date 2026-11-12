@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from ..auth import can_manage_users, hash_password, validate_password_strength, require_user, UserDep
 from ..config import ROLES
+from ..dependencies import get_db
 from ..models import AuditLog, User
 from ..utils import audit, redirect_to, render
 
@@ -18,20 +19,8 @@ logger = logging.getLogger("soc_tracker.admin_routes")
 router = APIRouter()
 
 
-def get_db():
-    from ..models import SessionLocal
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-DbSession = Annotated[Session, Depends(get_db)]
-
-
 @router.get("/admin/users/", response_class=HTMLResponse)
-async def user_admin(request: Request, db: DbSession, user: UserDep):
+async def user_admin(request: Request, user: UserDep, db: Session = Depends(get_db)):
     if not can_manage_users(user):
         raise HTTPException(status_code=403)
     users = list(db.scalars(select(User).order_by(User.username)))
@@ -41,11 +30,11 @@ async def user_admin(request: Request, db: DbSession, user: UserDep):
 @router.post("/admin/users/")
 async def user_create(
     request: Request,
-    db: DbSession,
-    user: UserDep,
     username: Annotated[str, Form()],
     password: Annotated[str, Form()],
     role: Annotated[str, Form()],
+    user: UserDep,
+    db: Session = Depends(get_db),
 ):
     if not can_manage_users(user):
         raise HTTPException(status_code=403)
@@ -73,9 +62,9 @@ async def user_create(
 async def user_role_update(
     request: Request,
     user_id: int,
-    db: DbSession,
-    user: UserDep,
     role: Annotated[str, Form()],
+    user: UserDep,
+    db: Session = Depends(get_db),
 ):
     if not can_manage_users(user):
         raise HTTPException(status_code=403)
@@ -98,9 +87,9 @@ async def user_role_update(
 async def user_password_reset(
     request: Request,
     user_id: int,
-    db: DbSession,
-    user: UserDep,
     password: Annotated[str, Form()],
+    user: UserDep,
+    db: Session = Depends(get_db),
 ):
     if not can_manage_users(user):
         raise HTTPException(status_code=403)
@@ -118,7 +107,7 @@ async def user_password_reset(
 
 
 @router.get("/admin/audit/", response_class=HTMLResponse)
-async def audit_log_page(request: Request, db: DbSession, user: UserDep):
+async def audit_log_page(request: Request, user: UserDep, db: Session = Depends(get_db)):
     if not can_manage_users(user):
         raise HTTPException(status_code=403)
     logs = list(db.scalars(select(AuditLog).order_by(AuditLog.created_at.desc()).limit(200)))

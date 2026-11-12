@@ -13,7 +13,7 @@ from urllib.parse import urlencode
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from ..config import UPLOAD_DIR
+from ..config import SEVERITIES, STATUSES, UPLOAD_DIR
 from ..models import Alert, AlertEvent, Evidence, User, generate_alert_id
 
 logger = logging.getLogger("soc_tracker.alert_service")
@@ -22,7 +22,22 @@ logger = logging.getLogger("soc_tracker.alert_service")
 def create_alert(db: Session, values: dict, user: User | None = None) -> Alert:
     """Create a new alert with event logging."""
     iocs = values.pop("iocs", None) or []
+    if not isinstance(iocs, list) or len(iocs) > 500:
+        raise ValueError("IOC list must contain at most 500 values.")
+    if any(not isinstance(value, (str, int, float)) or len(str(value)) > 2048 for value in iocs):
+        raise ValueError("IOC values must be strings of at most 2048 characters.")
     actor = user or values.get("created_by")
+    required_limits = {"title": 180, "description": 10000, "source": 80, "tactic": 100, "asset": 160}
+    for key, limit in required_limits.items():
+        value = values.get(key, "")
+        if not isinstance(value, str) or len(value) > limit:
+            raise ValueError(f"{key.title()} must be text of at most {limit} characters.")
+    if not values.get("title", "").strip():
+        raise ValueError("Title is required.")
+    if values.get("severity", "Medium") not in SEVERITIES or values.get("status", "New") not in STATUSES:
+        raise ValueError("Invalid severity or status.")
+    if not isinstance(values.get("sla_hours", 8), int) or not 1 <= values.get("sla_hours", 8) <= 8760:
+        raise ValueError("SLA hours must be between 1 and 8760.")
     alert = Alert(alert_id=generate_alert_id(), **values)
     alert.iocs = iocs
     if user:
@@ -155,17 +170,36 @@ def form_values(form: dict) -> dict:
     if len(asset) > 160:
         raise ValueError("Asset must be 160 characters or less.")
 
+    severity = form.get("severity", "Medium")
+    status = form.get("status", "New")
+    analyst = form.get("analyst", "Unassigned").strip() or "Unassigned"
+    if severity not in SEVERITIES:
+        raise ValueError("Select a valid severity.")
+    if status not in STATUSES:
+        raise ValueError("Select a valid status.")
+    if len(analyst) > 80:
+        raise ValueError("Analyst must be 80 characters or less.")
+    try:
+        sla_hours = int(form.get("sla_hours") or 8)
+    except (TypeError, ValueError):
+        raise ValueError("SLA hours must be a whole number.") from None
+    if not 1 <= sla_hours <= 8760:
+        raise ValueError("SLA hours must be between 1 and 8760.")
+    iocs = [item.strip() for item in iocs_text.split(",") if item.strip()]
+    if len(iocs) > 500 or any(len(item) > 2048 for item in iocs):
+        raise ValueError("Provide no more than 500 IOCs, each 2048 characters or less.")
+
     return {
         "title": title,
         "description": description,
         "source": source,
-        "severity": form.get("severity", "Medium"),
-        "status": form.get("status", "New"),
-        "analyst": form.get("analyst", "Unassigned").strip() or "Unassigned",
+        "severity": severity,
+        "status": status,
+        "analyst": analyst,
         "tactic": tactic,
         "asset": asset,
-        "iocs": [item.strip() for item in iocs_text.split(",") if item.strip()],
-        "sla_hours": int(form.get("sla_hours") or 8),
+        "iocs": iocs,
+        "sla_hours": sla_hours,
     }
 
 
@@ -179,15 +213,11 @@ def export_csv(alerts: list[Alert]) -> str:
         "created_at", "updated_at"
     ])
     for alert in alerts:
+        # Spreadsheet programs treat cells beginning with these characters as formulas.
+        safe = lambda value: "'" + str(value) if str(value).lstrip().startswith(("=", "+", "-", "@", "\t", "\r")) else value
         writer.writerow([
-            alert.alert_id,
-            alert.title,
-            alert.severity,
-            alert.status,
-            alert.source,
-            alert.analyst,
-            alert.asset,
-            alert.tactic,
+            safe(alert.alert_id), safe(alert.title), safe(alert.severity), safe(alert.status),
+            safe(alert.source), safe(alert.analyst), safe(alert.asset), safe(alert.tactic),
             alert.sla_hours,
             sla_status(alert)["label"],
             alert.created_at.isoformat(),

@@ -2,6 +2,7 @@
 
 import hashlib
 import logging
+import re
 import secrets
 from pathlib import Path
 from typing import Annotated
@@ -11,24 +12,13 @@ from sqlalchemy.orm import Session
 
 from ..auth import can_edit_alert, require_user, UserDep
 from ..config import ALLOWED_EVIDENCE_EXTENSIONS, MAX_UPLOAD_BYTES, UPLOAD_DIR
+from ..dependencies import get_db
 from ..models import Alert, AlertEvent, Evidence
 from ..utils import audit, redirect_to
 
 logger = logging.getLogger("soc_tracker.evidence_routes")
 
 router = APIRouter()
-
-
-def get_db():
-    from ..models import SessionLocal
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-DbSession = Annotated[Session, Depends(get_db)]
 
 
 def secure_upload_name(filename: str) -> str:
@@ -38,16 +28,13 @@ def secure_upload_name(filename: str) -> str:
     return name or "evidence.bin"
 
 
-import re
-
-
 @router.post("/alerts/{pk}/evidence/")
 async def evidence_upload(
     request: Request,
     pk: int,
-    db: DbSession,
-    user: UserDep,
     evidence_file: Annotated[UploadFile, File()],
+    user: UserDep,
+    db: Session = Depends(get_db),
 ):
     alert = db.get(Alert, pk)
     if not alert:
@@ -58,9 +45,15 @@ async def evidence_upload(
     extension = Path(original_name).suffix.lower()
     if extension not in ALLOWED_EVIDENCE_EXTENSIONS:
         return redirect_to(alert.get_absolute_url(), f"Evidence type {extension or '(none)'} is not allowed.")
-    content = await evidence_file.read()
-    if len(content) > MAX_UPLOAD_BYTES:
-        return redirect_to(alert.get_absolute_url(), "Evidence file is too large.")
+    chunks = []
+    total = 0
+    while chunk := await evidence_file.read(min(1024 * 1024, MAX_UPLOAD_BYTES + 1 - total)):
+        total += len(chunk)
+        if total > MAX_UPLOAD_BYTES:
+            await evidence_file.close()
+            return redirect_to(alert.get_absolute_url(), "Evidence file is too large.")
+        chunks.append(chunk)
+    content = b"".join(chunks)
     digest = hashlib.sha256(content).hexdigest()
     stored_name = f"{alert.alert_id}_{secrets.token_hex(8)}{extension}"
     path = UPLOAD_DIR / stored_name
@@ -83,15 +76,13 @@ async def evidence_upload(
 
 
 @router.get("/evidence/{evidence_id}/")
-async def evidence_download(evidence_id: int, db: DbSession, user: UserDep):
+async def evidence_download(evidence_id: int, user: UserDep, db: Session = Depends(get_db)):
     evidence = db.get(Evidence, evidence_id)
     if not evidence:
         raise HTTPException(status_code=404)
-    # Authorize: user must be able to view the parent alert
     alert = db.get(Alert, evidence.alert_id)
     if not alert:
         raise HTTPException(status_code=404)
-    # All authenticated users can view alerts, so evidence access is allowed
     path = UPLOAD_DIR / evidence.stored_name
     if not path.exists():
         raise HTTPException(status_code=404)

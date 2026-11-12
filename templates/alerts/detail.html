@@ -11,12 +11,6 @@
         <button class="primary" type="submit">Escalate alert</button>
       </form>
     {% endif %}
-    {% if can_delete_alert %}
-      <form method="post" action="/alerts/{{ alert.pk }}/delete/">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <button class="danger" type="submit">Delete</button>
-      </form>
-    {% endif %}
   </div>
   <p class="eyebrow">Alert detail</p>
   <h1>{{ alert.alert_id }} {{ alert.title }}</h1>

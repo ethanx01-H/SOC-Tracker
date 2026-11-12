@@ -14,21 +14,21 @@ A lightweight, self-hosted security operations alert tracker built with FastAPI.
 git clone https://github.com/ethanx01-H/SOC-Tracker.git
 cd SOC-Tracker
 cp .env.example .env
-# Edit .env — set N8N_API_KEY and APP_SECRET_KEY
+# Replace N8N_API_KEY and APP_SECRET_KEY with separate random 32-byte secrets.
 docker compose up --build
 ```
 
-Open `http://localhost:8080` and log in with the demo accounts below.
+The review deployment listens on `http://127.0.0.1:8080` and creates no default users or sample incidents. Create the first administrator in a second terminal:
 
-## Demo users
+```bash
+docker compose exec soc-alert-tracker python -m soc_tracker.manage create-admin socadmin
+```
 
-Created automatically on first startup:
+The command prompts for the password twice. Create additional analysts from the administrator page.
 
-| Username   | Role         | Password      |
-|------------|--------------|---------------|
-| `l1`       | L1 Analyst   | `password123` |
-| `l2`       | L2 Analyst   | `password123` |
-| `admin_l3` | L3 Admin     | `password123` |
+This compose setup binds to localhost for review and defaults to non-secure cookies so it works over local HTTP. For production, set `APP_ENV=production` and `COOKIE_SECURE=1`, put the app behind HTTPS, and restrict access to the proxy/network. Do not expose port 8080 directly to the internet. [nginx.conf](nginx.conf) is an example HTTPS reverse proxy configuration; update its hostname and certificate paths before enabling it.
+
+The default SQLite deployment is a single-instance pilot setup. Back up the Docker volume and evidence files together, test restores, and export audit logs to protected external storage for production use. Request limiting and login lockout are in process memory; keep one worker and use proxy-level limits unless a shared limiter is configured.
 
 ## Screenshots
 
@@ -73,7 +73,7 @@ Create users, manage roles (L1/L2/L3), and reset passwords.
 | Edit alerts        | Yes*       | Yes        | Yes      |
 | Escalate alerts    | Yes        | Yes        | Yes      |
 | Assign to analysts | No         | L1 only    | L1 + L2  |
-| Delete alerts      | No         | No         | Yes      |
+| Delete alerts      | No         | No         | Disabled |
 | Manage users       | No         | No         | Yes      |
 
 *L1 cannot edit alerts after they are escalated.
@@ -118,20 +118,20 @@ http://localhost:8080/r/SOC-000001/
 
 ## Security
 
-Tested against OWASP Top 10 (2021). All categories pass.
+Security controls are implemented in the application, but this project has not had an independent security assessment. Do not interpret the listed controls as OWASP certification or production assurance.
 
 | OWASP Category                  | Status | Controls                                                  |
 |---------------------------------|--------|-----------------------------------------------------------|
-| A01 Broken Access Control       | Pass   | Auth required on all routes, RBAC on every action         |
-| A02 Cryptographic Failures      | Pass   | PBKDF2-SHA256 (240k iterations), timing-safe comparisons  |
-| A03 Injection                   | Pass   | SQLAlchemy ORM, Jinja2 auto-escaping, no command exec     |
-| A04 Insecure Design             | Pass   | Login lockout (5 failures / 5 min), password policy       |
-| A05 Security Misconfiguration   | Pass   | CSP, X-Frame-Options, HSTS, nosniff, Referrer-Policy     |
-| A06 Vulnerable Components       | Pass   | Current dependency versions with version ranges           |
-| A07 Auth Failures               | Pass   | 8h session expiry, failed login audit, lockout            |
-| A08 Integrity Failures          | Pass   | CSRF on all form endpoints, file upload validation        |
-| A09 Logging & Monitoring        | Pass   | Audit log for create/edit/assign/close/delete/auth events |
-| A10 SSRF                        | Pass   | No outbound request features                              |
+| A01 Broken Access Control       | Implemented | Authentication and role checks on protected actions |
+| A02 Cryptographic Failures      | Implemented | PBKDF2-SHA256 password hashing and signed sessions  |
+| A03 Injection                   | Implemented | SQLAlchemy ORM and escaped templates                |
+| A04 Insecure Design             | Implemented | Login lockout, password policy, bounded requests     |
+| A05 Security Misconfiguration   | Implemented | CSP, frame protection, HSTS in secure-cookie mode    |
+| A06 Vulnerable Components       | Review      | Dependency ranges are not a vulnerability assessment |
+| A07 Auth Failures               | Implemented | Timed sessions, failed-login audit, lockout           |
+| A08 Integrity Failures          | Implemented | CSRF checks and evidence upload validation            |
+| A09 Logging & Monitoring        | Review | Application audit events; export to protected external storage for production |
+| A10 SSRF                        | Implemented | No outbound request features                          |
 
 ### Security headers
 
@@ -161,7 +161,7 @@ All settings are controlled via environment variables. See `.env.example` for th
 | `LOGIN_LOCKOUT_THRESHOLD`| No       | `5`                    | Failed login attempts before lockout     |
 | `LOGIN_LOCKOUT_SECONDS`  | No       | `300`                  | Lockout duration in seconds              |
 
-*Auto-generated if not set, but you should set explicit values for production and Docker Compose.
+Production startup fails unless both secrets are explicitly supplied and at least 32 characters long. Keep them stable and private.
 
 ## Development
 

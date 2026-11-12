@@ -16,8 +16,8 @@ from ..auth import (
     can_assign_alert,
     assignable_roles_for,
     require_user,
-    UserDep,
 )
+from ..dependencies import get_db
 from ..models import Alert, AlertEvent, Evidence, User
 from ..services.alert_service import (
     create_alert,
@@ -35,20 +35,8 @@ logger = logging.getLogger("soc_tracker.alert_routes")
 router = APIRouter()
 
 
-def get_db():
-    from ..models import SessionLocal
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-DbSession = Annotated[Session, Depends(get_db)]
-
-
 @router.get("/", response_class=HTMLResponse)
-async def dashboard(request: Request, db: DbSession, user: UserDep):
+async def dashboard(request: Request, db: Session = Depends(get_db), user: User = Depends(require_user)):
     alerts = filtered_alerts(db, request)
     counts = {
         "total": len(alerts),
@@ -65,7 +53,7 @@ async def dashboard(request: Request, db: DbSession, user: UserDep):
 
 
 @router.get("/alerts/", response_class=HTMLResponse)
-async def alert_list(request: Request, db: DbSession, user: UserDep, page: int = 1):
+async def alert_list(request: Request, db: Session = Depends(get_db), user: User = Depends(require_user), page: int = 1):
     pagination = filtered_alerts_paginated(db, request, page=page)
     return render(request, "alerts/list.html", {
         "alerts": pagination["alerts"],
@@ -76,7 +64,7 @@ async def alert_list(request: Request, db: DbSession, user: UserDep, page: int =
 
 
 @router.get("/alerts/mine/", response_class=HTMLResponse)
-async def my_alerts(request: Request, db: DbSession, user: UserDep):
+async def my_alerts(request: Request, db: Session = Depends(get_db), user: User = Depends(require_user)):
     alerts = [
         a for a in filtered_alerts(db, request)
         if (a.assigned_to_id == user.id or a.analyst == user.username) and a.status != "Closed"
@@ -89,7 +77,7 @@ async def my_alerts(request: Request, db: DbSession, user: UserDep):
 
 
 @router.get("/alerts/export.csv")
-async def alert_export(request: Request, db: DbSession, user: UserDep):
+async def alert_export(request: Request, db: Session = Depends(get_db), user: User = Depends(require_user)):
     alerts = filtered_alerts(db, request)
     csv_content = export_csv(alerts)
     return Response(
@@ -100,14 +88,14 @@ async def alert_export(request: Request, db: DbSession, user: UserDep):
 
 
 @router.get("/alerts/new/", response_class=HTMLResponse)
-async def alert_create_page(request: Request, db: DbSession, user: UserDep):
+async def alert_create_page(request: Request, db: Session = Depends(get_db), user: User = Depends(require_user)):
     if not can_create_alert(user):
         raise HTTPException(status_code=403)
     return render(request, "alerts/form.html", {"title": "New alert", "alert": None, "form": {}}, db, user)
 
 
 @router.post("/alerts/new/")
-async def alert_create(request: Request, db: DbSession, user: UserDep):
+async def alert_create(request: Request, db: Session = Depends(get_db), user: User = Depends(require_user)):
     if not can_create_alert(user):
         raise HTTPException(status_code=403)
     form = dict(await request.form())
@@ -128,7 +116,7 @@ async def alert_create(request: Request, db: DbSession, user: UserDep):
 
 
 @router.get("/r/{alert_id}/")
-async def alert_report(alert_id: str, db: DbSession, user: UserDep):
+async def alert_report(alert_id: str, db: Session = Depends(get_db), user: User = Depends(require_user)):
     alert = db.scalar(select(Alert).where(Alert.alert_id == alert_id))
     if not alert:
         raise HTTPException(status_code=404)
@@ -136,7 +124,7 @@ async def alert_report(alert_id: str, db: DbSession, user: UserDep):
 
 
 @router.get("/alerts/{pk}/", response_class=HTMLResponse)
-async def alert_detail(request: Request, pk: int, db: DbSession, user: UserDep):
+async def alert_detail(request: Request, pk: int, db: Session = Depends(get_db), user: User = Depends(require_user)):
     alert = db.get(Alert, pk)
     if not alert:
         raise HTTPException(status_code=404)
@@ -154,7 +142,7 @@ async def alert_detail(request: Request, pk: int, db: DbSession, user: UserDep):
 
 
 @router.get("/alerts/{pk}/edit/", response_class=HTMLResponse)
-async def alert_edit_page(request: Request, pk: int, db: DbSession, user: UserDep):
+async def alert_edit_page(request: Request, pk: int, db: Session = Depends(get_db), user: User = Depends(require_user)):
     alert = db.get(Alert, pk)
     if not alert:
         raise HTTPException(status_code=404)
@@ -176,7 +164,7 @@ async def alert_edit_page(request: Request, pk: int, db: DbSession, user: UserDe
 
 
 @router.post("/alerts/{pk}/edit/")
-async def alert_edit(request: Request, pk: int, db: DbSession, user: UserDep):
+async def alert_edit(request: Request, pk: int, db: Session = Depends(get_db), user: User = Depends(require_user)):
     alert = db.get(Alert, pk)
     if not alert:
         raise HTTPException(status_code=404)
@@ -213,7 +201,7 @@ async def alert_edit(request: Request, pk: int, db: DbSession, user: UserDep):
 
 
 @router.post("/alerts/{pk}/escalate/")
-async def alert_escalate(pk: int, db: DbSession, user: UserDep):
+async def alert_escalate(pk: int, db: Session = Depends(get_db), user: User = Depends(require_user)):
     alert = db.get(Alert, pk)
     if not alert:
         raise HTTPException(status_code=404)
@@ -223,12 +211,13 @@ async def alert_escalate(pk: int, db: DbSession, user: UserDep):
     alert.escalated_by = user
     alert.updated_by = user
     db.add(AlertEvent(alert=alert, event_type="escalated", actor=user, message=f"{user.username} escalated this alert."))
+    audit(db, user, "alert.escalated", f"Escalated {alert.alert_id}.", "alert", alert.alert_id)
     db.commit()
     return redirect_to(alert.get_absolute_url(), f"Escalated {alert.alert_id}.")
 
 
 @router.post("/alerts/{pk}/assign/")
-async def alert_assign(request: Request, pk: int, db: DbSession, user: UserDep):
+async def alert_assign(request: Request, pk: int, db: Session = Depends(get_db), user: User = Depends(require_user)):
     alert = db.get(Alert, pk)
     if not alert:
         raise HTTPException(status_code=404)
@@ -256,7 +245,7 @@ async def alert_assign(request: Request, pk: int, db: DbSession, user: UserDep):
 
 
 @router.post("/alerts/{pk}/notes/")
-async def alert_note(request: Request, pk: int, db: DbSession, user: UserDep):
+async def alert_note(request: Request, pk: int, db: Session = Depends(get_db), user: User = Depends(require_user)):
     alert = db.get(Alert, pk)
     if not alert:
         raise HTTPException(status_code=404)
@@ -264,14 +253,17 @@ async def alert_note(request: Request, pk: int, db: DbSession, user: UserDep):
     note = form.get("note", "").strip()
     if not note:
         return redirect_to(alert.get_absolute_url(), "Note cannot be empty.")
+    if len(note) > 10000:
+        return redirect_to(alert.get_absolute_url(), "Notes must be 10000 characters or less.")
     db.add(AlertEvent(alert=alert, event_type="note", actor=user, message=note))
+    audit(db, user, "alert.note_added", f"Added a note to {alert.alert_id}.", "alert", alert.alert_id, request)
     alert.updated_by = user
     db.commit()
     return redirect_to(alert.get_absolute_url(), "Added investigation note.")
 
 
 @router.post("/alerts/{pk}/close/")
-async def alert_close(request: Request, pk: int, db: DbSession, user: UserDep):
+async def alert_close(request: Request, pk: int, db: Session = Depends(get_db), user: User = Depends(require_user)):
     alert = db.get(Alert, pk)
     if not alert:
         raise HTTPException(status_code=404)
@@ -290,15 +282,7 @@ async def alert_close(request: Request, pk: int, db: DbSession, user: UserDep):
 
 
 @router.post("/alerts/{pk}/delete/")
-async def alert_delete(request: Request, pk: int, db: DbSession, user: UserDep):
+async def alert_delete(request: Request, pk: int, db: Session = Depends(get_db), user: User = Depends(require_user)):
     if not can_delete_alert(user):
         raise HTTPException(status_code=403)
-    alert = db.get(Alert, pk)
-    if not alert:
-        raise HTTPException(status_code=404)
-    alert_id = alert.alert_id
-    audit(db, user, "alert.deleted", f"Deleted {alert_id}.", "alert", alert_id, request)
-    db.delete(alert)
-    db.commit()
-    logger.info("Alert %s deleted by %s", alert_id, user.username)
-    return redirect_to("/alerts/", f"Deleted {alert_id}.")
+    raise HTTPException(status_code=409, detail="Alert deletion is disabled to preserve incident and evidence history. Close the alert instead.")

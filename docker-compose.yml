@@ -4,9 +4,19 @@ services:
     image: soc-alert-tracker:local
     env_file: .env
     environment:
+      APP_ENV: ${APP_ENV:-review}
       SQLITE_PATH: /app/data/fastapi.sqlite3
+      COOKIE_SECURE: ${COOKIE_SECURE:-0}
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     volumes:
-      - ./data:/app/data
+      - soc_tracker_data:/app/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8080/healthz', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  soc_tracker_data:
