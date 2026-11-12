@@ -39,8 +39,8 @@
       <input id="asset" name="asset" maxlength="160" value="{{ form.get('asset', 'Unknown') }}">
     </p>
     <p>
-      <label for="iocs_text">IOCs</label>
-      <input id="iocs_text" name="iocs_text" placeholder="IP, hash, domain, username" value="{{ form.get('iocs_text', '') }}">
+      <label for="iocs_text">IOCs (optional)</label>
+      <input id="iocs_text" name="iocs_text" placeholder="Leave blank if there are no known indicators" value="{{ form.get('iocs_text', '') }}">
     </p>
     <p>
       <label for="sla_hours">SLA hours</label>

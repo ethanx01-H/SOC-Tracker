@@ -16,6 +16,7 @@ from ..auth import (
     can_assign_alert,
     assignable_roles_for,
     require_user,
+    user_role,
 )
 from ..dependencies import get_db
 from ..models import Alert, AlertEvent, Evidence, User
@@ -130,9 +131,8 @@ async def alert_detail(request: Request, pk: int, db: Session = Depends(get_db),
         "alert": alert,
         "can_edit": can_edit_alert(user, alert),
         "can_escalate": can_escalate_alert(user) and alert.status != "Closed" and alert.escalated_by_id is None,
-        "can_start": alert.status == "Pending" and (
-            alert.assigned_to_id == user.id or (alert.assigned_to_id is None and alert.analyst == user.username)
-        ),
+        "can_take": alert.status == "Open" and alert.assigned_to_id is None and user_role(user) in {"L1", "L2"},
+        "status_choices": ["Open", "WIP", "Pending"],
         "can_assign": can_assign_alert(user),
         "assignable_users": assignable_users,
         "evidence": evidence,
@@ -211,22 +211,76 @@ async def alert_escalate(request: Request, pk: int, db: Session = Depends(get_db
     return redirect_to(alert.get_absolute_url(), f"Escalated {alert.alert_id}.")
 
 
-@router.post("/alerts/{pk}/start/")
-async def alert_start(request: Request, pk: int, db: Session = Depends(get_db), user: User = Depends(require_user)):
+@router.post("/alerts/{pk}/take/")
+async def alert_take(request: Request, pk: int, db: Session = Depends(get_db), user: User = Depends(require_user)):
     alert = db.get(Alert, pk)
     if not alert:
         raise HTTPException(status_code=404)
-    is_assigned_analyst = alert.assigned_to_id == user.id or (
-        alert.assigned_to_id is None and alert.analyst == user.username
-    )
-    if not is_assigned_analyst or alert.status != "Pending":
+    if user_role(user) not in {"L1", "L2"}:
         raise HTTPException(status_code=403)
-    alert.status = "WIP"
+    if alert.status != "Open" or alert.assigned_to_id is not None:
+        raise HTTPException(status_code=409, detail="Only unassigned Open tickets can be taken.")
+    alert.assigned_to = user
+    alert.assigned_by = user
+    alert.analyst = user.username
+    alert.status = "Pending"
     alert.updated_by = user
-    db.add(AlertEvent(alert=alert, event_type="started", actor=user, message=f"{user.username} started work on {alert.alert_id}."))
-    audit(db, user, "alert.started", f"Started work on {alert.alert_id}.", "alert", alert.alert_id, request)
+    db.add(AlertEvent(
+        alert=alert, event_type="assigned", actor=user, assigned_to=user,
+        message=f"{user.username} assigned this ticket to themselves.",
+    ))
+    audit(db, user, "alert.self_assigned", f"Assigned {alert.alert_id} to self.", "alert", alert.alert_id, request)
     db.commit()
-    return redirect_to(alert.get_absolute_url(), f"Started work on {alert.alert_id}.")
+    return redirect_to(alert.get_absolute_url(), f"Assigned {alert.alert_id} to you.")
+
+
+@router.post("/alerts/{pk}/status/")
+async def alert_status_update(
+    request: Request,
+    pk: int,
+    status: Annotated[str, Form()],
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    alert = db.get(Alert, pk)
+    if not alert:
+        raise HTTPException(status_code=404)
+    if not can_edit_alert(user, alert):
+        raise HTTPException(status_code=403)
+    if alert.status == "Closed":
+        raise HTTPException(status_code=409, detail="Closed tickets cannot be reopened here.")
+    if status not in {"Open", "WIP", "Pending"}:
+        raise HTTPException(status_code=422, detail="Select Open, WIP, or Pending.")
+
+    old_status = alert.status
+    if status == "Open":
+        if alert.assigned_to_id is not None and alert.assigned_to_id != user.id and not can_assign_alert(user):
+            raise HTTPException(status_code=403)
+        alert.assigned_to = None
+        alert.assigned_by = None
+        alert.analyst = "Unassigned"
+    elif alert.assigned_to_id is None:
+        if user_role(user) not in {"L1", "L2"}:
+            raise HTTPException(status_code=409, detail="Assign this ticket to an analyst first.")
+        alert.assigned_to = user
+        alert.assigned_by = user
+        alert.analyst = user.username
+        db.add(AlertEvent(
+            alert=alert, event_type="assigned", actor=user, assigned_to=user,
+            message=f"{user.username} assigned this ticket to themselves.",
+        ))
+    elif alert.assigned_to_id != user.id and not can_assign_alert(user):
+        raise HTTPException(status_code=403, detail="Only the assigned analyst or an assigning role can change this ticket's status.")
+
+    alert.status = status
+    alert.updated_by = user
+    db.add(AlertEvent(
+        alert=alert, event_type="status_changed", actor=user,
+        message=f"{user.username} changed status from {old_status} to {status}.",
+    ))
+    audit(db, user, "alert.status_changed", f"Changed {alert.alert_id} from {old_status} to {status}.", "alert", alert.alert_id, request)
+    db.commit()
+    return redirect_to(alert.get_absolute_url(), f"Updated {alert.alert_id} to {status}.")
 
 
 @router.post("/alerts/{pk}/assign/")
@@ -288,10 +342,8 @@ async def alert_close(request: Request, pk: int, db: Session = Depends(get_db), 
         raise HTTPException(status_code=409, detail="Ticket is already closed.")
     form = dict(await request.form())
     summary = form.get("resolution_summary", "").strip()
-    if len(summary) < 20:
-        return redirect_to(alert.get_absolute_url(), "Resolution summary must be at least 20 characters.")
-    if len(summary) > 10000:
-        return redirect_to(alert.get_absolute_url(), "Resolution summary must be 10000 characters or less.")
+    if not summary:
+        return redirect_to(alert.get_absolute_url(), "Resolution summary is required.")
     alert.status = "Closed"
     alert.updated_by = user
     db.add(AlertEvent(alert=alert, event_type="closed", actor=user, message=f"Resolution: {summary}"))

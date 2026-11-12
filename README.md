@@ -100,10 +100,11 @@ Create users, manage roles (L1/L2/L3), and reset passwords.
 ## Features
 
 ### Alert management
-- SOC dashboard with severity/source/analyst/tactic pie charts and alert counts
+- SOC dashboard with source/analyst/tactic pie charts and alert counts
 - Create, edit, escalate, assign, and close alerts with resolution summaries
 - Sequential ticket numbers (`#1`, `#2`, ...) that remain stable after migration
-- Ticket workflow: Open when unassigned, Pending when assigned, WIP when work starts, and Closed after resolution
+- Ticket workflow: Open when unassigned, Pending while awaiting analysis, WIP during active analysis, and Closed after resolution; analysts can assign open tickets to themselves
+- Optional IOCs when creating tickets; close summaries have no application-level word-count limit
 - Filter by severity, status, search terms; CSV export of filtered results
 - Evidence file uploads with SHA-256 integrity tracking
 - Evidence uploads accept `.xlsx`, `.csv`, `.jpg`, and `.png` files

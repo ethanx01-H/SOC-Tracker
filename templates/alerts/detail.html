@@ -5,16 +5,16 @@
   <div class="detail-actions">
     <a class="button" href="/alerts/">Back</a>
     {% if can_edit %}<a class="button" href="/alerts/{{ alert.pk }}/edit/">Edit</a>{% endif %}
+    {% if can_take %}
+      <form method="post" action="/alerts/{{ alert.pk }}/take/">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="primary" type="submit">Assign to me</button>
+      </form>
+    {% endif %}
     {% if can_escalate %}
       <form method="post" action="/alerts/{{ alert.pk }}/escalate/">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <button class="primary" type="submit">Escalate alert</button>
-      </form>
-    {% endif %}
-    {% if can_start %}
-      <form method="post" action="/alerts/{{ alert.pk }}/start/">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <button class="primary" type="submit">Start work</button>
       </form>
     {% endif %}
   </div>
@@ -22,20 +22,33 @@
   <h1>{{ alert.alert_id }} {{ alert.title }}</h1>
   <div class="pill-row">
     <span class="pill severity-{{ alert.severity }}">{{ alert.severity }}</span>
-    <span class="pill status-{{ alert.status|lower }}">{{ alert.status }}</span>
+    {% if alert.status != "Closed" and can_edit %}
+      <form method="post" action="/alerts/{{ alert.pk }}/status/" class="inline-form status-control">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label for="ticket-status">Status</label>
+        <select id="ticket-status" name="status">
+          {% for status in status_choices %}
+            <option value="{{ status }}" {% if alert.status == status %}selected{% endif %}>{{ status }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit">Update</button>
+      </form>
+    {% else %}
+      <span class="pill status-{{ alert.status|lower }}">{{ alert.status }}</span>
+    {% endif %}
     {% set sla = sla_status(alert) %}
     <span class="pill {{ sla.class }}">{{ sla.label }}</span>
     <span class="pill">{{ alert.source }}</span>
   </div>
   <div class="detail-grid">
-    <div><strong>Analyst</strong><span>{{ alert.analyst }}</span></div>
-    <div><strong>Assigned to</strong><span>{{ alert.assigned_to or "Unassigned" }}</span></div>
-    <div><strong>Assigned by</strong><span>{{ alert.assigned_by or "-" }}</span></div>
-    <div><strong>Asset</strong><span>{{ alert.asset }}</span></div>
-    <div><strong>MITRE tactic</strong><span>{{ alert.tactic }}</span></div>
-    <div><strong>SLA</strong><span>{{ alert.sla_hours }} hours</span></div>
-    <div><strong>Created by</strong><span>{{ alert.created_by or "Webhook" }}</span></div>
-    <div><strong>Escalated by</strong><span>{{ alert.escalated_by or "-" }}</span></div>
+    <div><strong>Analyst:</strong>&nbsp;<span>{{ alert.analyst }}</span></div>
+    <div><strong>Assigned to:</strong>&nbsp;<span>{{ alert.assigned_to or "Unassigned" }}</span></div>
+    <div><strong>Assigned by:</strong>&nbsp;<span>{{ alert.assigned_by or "-" }}</span></div>
+    <div><strong>Asset:</strong>&nbsp;<span>{{ alert.asset }}</span></div>
+    <div><strong>MITRE tactic:</strong>&nbsp;<span>{{ alert.tactic }}</span></div>
+    <div><strong>SLA:</strong>&nbsp;<span>{{ alert.sla_hours }} hours</span></div>
+    <div><strong>Created by:</strong>&nbsp;<span>{{ alert.created_by or "Webhook" }}</span></div>
+    <div><strong>Escalated by:</strong>&nbsp;<span>{{ alert.escalated_by or "-" }}</span></div>
   </div>
   {% if can_assign and assignable_users %}
     <section class="assign-panel">
@@ -56,18 +69,20 @@
     <h2>Description</h2>
     <p class="description-full">{{ alert.description }}</p>
   </section>
-  <section>
-    <h2>IOCs</h2>
-    <div class="pill-row">
-      {% for ioc in alert.iocs %}<span class="pill">{{ ioc }}</span>{% else %}<span class="muted">No IOCs</span>{% endfor %}
-    </div>
-  </section>
+  {% if alert.iocs %}
+    <section>
+      <h2>IOCs</h2>
+      <div class="pill-row">
+        {% for ioc in alert.iocs %}<span class="pill">{{ ioc }}</span>{% endfor %}
+      </div>
+    </section>
+  {% endif %}
   {% if alert.status != "Closed" and can_edit %}
     <section class="assign-panel">
       <h2>Close alert</h2>
       <form method="post" action="/alerts/{{ alert.pk }}/close/" class="form-grid">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <textarea name="resolution_summary" rows="4" minlength="20" placeholder="Summarize disposition, root cause, impacted assets, and final action" required></textarea>
+        <textarea name="resolution_summary" rows="4" placeholder="Summarize disposition, root cause, impacted assets, and final action" required></textarea>
         <div class="form-actions">
           <button class="primary" type="submit">Close with summary</button>
         </div>
