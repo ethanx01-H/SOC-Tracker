@@ -8,6 +8,31 @@
 
 A lightweight, self-hosted security operations alert tracker built with FastAPI. Designed for SOC teams that need role-based alert management, Elastic SIEM integration, and n8n workflow automation — without vendor lock-in.
 
+## Quick start (local Python demo)
+
+Create a virtual environment and install the app:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+```
+
+Set `APP_SECRET_KEY` and `N8N_API_KEY` in `.env` to different random values of at least 32 characters, then start the app bound to this computer:
+
+```bash
+.venv/bin/uvicorn main:app --host 127.0.0.1 --port 8080
+```
+
+On first startup, database migrations run automatically. In another terminal, create the first administrator:
+
+```bash
+.venv/bin/python -m soc_tracker.manage create-admin socadmin
+```
+
+The command prompts you to choose a password. Open `http://127.0.0.1:8080` and sign in as `socadmin`. This creates an empty tracker with no demo tickets or default users. Stop the server with `Ctrl+C`.
+
 ## Quick start (Docker)
 
 ```bash
