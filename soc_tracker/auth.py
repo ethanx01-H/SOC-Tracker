@@ -90,7 +90,7 @@ def can_create_alert(user: User) -> bool:
 
 def can_edit_alert(user: User, alert) -> bool:
     role = user_role(user)
-    return role in {"L2", "L3"} or (role == "L1" and alert.status != "Escalated")
+    return role in {"L2", "L3"} or (role == "L1" and alert.status != "Closed")
 
 
 def can_delete_alert(user: User) -> bool:

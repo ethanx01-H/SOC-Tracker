@@ -56,7 +56,7 @@ def record_to_alert(record):
         ]) or "Imported from Elastic JSON.",
         "source": first_value(record, ["source", "event.module", "event.dataset", "data_stream.dataset", "_index"]) or "Elastic",
         "severity": severity,
-        "status": "New",
+        "status": "Open",
         "analyst": "Unassigned",
         "tactic": first_value(record, [
             "tactic",

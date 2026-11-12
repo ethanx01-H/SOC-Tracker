@@ -194,7 +194,7 @@ class TestAssignableRoles:
 class TestEditPermissions:
     """Test alert edit permissions."""
 
-    def _make_alert(self, status="New"):
+    def _make_alert(self, status="Open"):
         """Create a mock alert."""
         from unittest.mock import MagicMock
         alert = MagicMock()
@@ -203,26 +203,26 @@ class TestEditPermissions:
 
     def test_l1_can_edit_new_alert(self):
         user = User(username="l1", role="L1", is_admin=False)
-        alert = self._make_alert("New")
+        alert = self._make_alert("Open")
         assert can_edit_alert(user, alert) is True
 
     def test_l1_can_edit_investigating_alert(self):
         user = User(username="l1", role="L1", is_admin=False)
-        alert = self._make_alert("Investigating")
+        alert = self._make_alert("WIP")
         assert can_edit_alert(user, alert) is True
 
-    def test_l1_cannot_edit_escalated_alert(self):
+    def test_l1_cannot_edit_closed_alert(self):
         user = User(username="l1", role="L1", is_admin=False)
-        alert = self._make_alert("Escalated")
+        alert = self._make_alert("Closed")
         assert can_edit_alert(user, alert) is False
 
-    def test_l2_can_edit_escalated_alert(self):
+    def test_l2_can_edit_wip_alert(self):
         user = User(username="l2", role="L2", is_admin=False)
-        alert = self._make_alert("Escalated")
+        alert = self._make_alert("WIP")
         assert can_edit_alert(user, alert) is True
 
     def test_l3_can_edit_any_alert(self):
         user = User(username="l3", role="L3", is_admin=False)
-        for status in ["New", "Triage", "Investigating", "Escalated", "Contained", "Closed"]:
+        for status in ["Open", "Pending", "WIP", "Closed"]:
             alert = self._make_alert(status)
             assert can_edit_alert(user, alert) is True

@@ -1,7 +1,6 @@
 """SQLAlchemy models for SOC Alert Tracker."""
 
 import json
-import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -56,7 +55,7 @@ class Alert(Base):
     description: Mapped[str] = mapped_column(Text, default="")
     source: Mapped[str] = mapped_column(String(80), default="Manual")
     severity: Mapped[str] = mapped_column(String(10), default="Medium")
-    status: Mapped[str] = mapped_column(String(20), default="New")
+    status: Mapped[str] = mapped_column(String(20), default="Open")
     analyst: Mapped[str] = mapped_column(String(80), default="Unassigned")
     tactic: Mapped[str] = mapped_column(String(100), default="Unknown")
     asset: Mapped[str] = mapped_column(String(160), default="Unknown")
@@ -151,8 +150,3 @@ class AuditLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     actor: Mapped[Optional[User]] = relationship()
-
-
-def generate_alert_id() -> str:
-    """Generate a unique alert ID using UUID to prevent race conditions."""
-    return f"SOC-{uuid.uuid4().hex[:12].upper()}"

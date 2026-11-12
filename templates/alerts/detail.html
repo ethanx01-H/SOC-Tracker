@@ -11,12 +11,18 @@
         <button class="primary" type="submit">Escalate alert</button>
       </form>
     {% endif %}
+    {% if can_start %}
+      <form method="post" action="/alerts/{{ alert.pk }}/start/">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="primary" type="submit">Start work</button>
+      </form>
+    {% endif %}
   </div>
   <p class="eyebrow">Alert detail</p>
   <h1>{{ alert.alert_id }} {{ alert.title }}</h1>
   <div class="pill-row">
     <span class="pill severity-{{ alert.severity }}">{{ alert.severity }}</span>
-    <span class="pill">{{ alert.status }}</span>
+    <span class="pill status-{{ alert.status|lower }}">{{ alert.status }}</span>
     {% set sla = sla_status(alert) %}
     <span class="pill {{ sla.class }}">{{ sla.label }}</span>
     <span class="pill">{{ alert.source }}</span>
@@ -56,10 +62,6 @@
       {% for ioc in alert.iocs %}<span class="pill">{{ ioc }}</span>{% else %}<span class="muted">No IOCs</span>{% endfor %}
     </div>
   </section>
-  <section>
-    <h2>Report URL</h2>
-    <input readonly value="{{ request.url_for('alert_report', alert_id=alert.alert_id) }}">
-  </section>
   {% if alert.status != "Closed" and can_edit %}
     <section class="assign-panel">
       <h2>Close alert</h2>
@@ -86,7 +88,7 @@
     <h2>Evidence</h2>
     <form method="post" action="/alerts/{{ alert.pk }}/evidence/" enctype="multipart/form-data" class="inline-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <input name="evidence_file" type="file" accept=".txt,.log,.json,.csv,.png,.jpg,.jpeg,.pdf,.pcap,.pcapng" required>
+      <input name="evidence_file" type="file" accept=".xlsx,.csv,.jpg,.jpeg,.png,.txt,.log,.json,.pdf,.pcap,.pcapng" required>
       <button class="primary" type="submit">Upload</button>
     </form>
     <div class="timeline">

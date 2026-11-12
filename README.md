@@ -59,9 +59,11 @@ Create users, manage roles (L1/L2/L3), and reset passwords.
 ### Alert management
 - SOC dashboard with severity/source/analyst/tactic pie charts and alert counts
 - Create, edit, escalate, assign, and close alerts with resolution summaries
-- Six-digit alert IDs (`SOC-000001`) with full-page detail links for reports
+- Sequential ticket numbers (`#1`, `#2`, ...) that remain stable after migration
+- Ticket workflow: Open when unassigned, Pending when assigned, WIP when work starts, and Closed after resolution
 - Filter by severity, status, search terms; CSV export of filtered results
 - Evidence file uploads with SHA-256 integrity tracking
+- Evidence uploads accept `.xlsx`, `.csv`, `.jpg`, and `.png` files
 - Investigation notes and activity-log timeline per alert
 
 ### Role-based access control
@@ -76,7 +78,7 @@ Create users, manage roles (L1/L2/L3), and reset passwords.
 | Delete alerts      | No         | No         | Disabled |
 | Manage users       | No         | No         | Yes      |
 
-*L1 cannot edit alerts after they are escalated.
+*L1 can edit assigned alerts while they remain open or in progress; closed tickets are read-only for L1.
 
 ### Elastic JSON import
 
@@ -105,15 +107,7 @@ Push enrichment logs into an existing alert:
 curl -X POST http://localhost:8080/api/webhook/n8n/logs/ \
   -H "X-API-Key: <your-key>" \
   -H "Content-Type: application/json" \
-  -d '{"alert_id":"SOC-000001","message":"GeoIP lookup completed.","workflow":"SOC enrichment"}'
-```
-
-### Report links
-
-Share direct links to individual alerts in weekly or monthly reports:
-
-```
-http://localhost:8080/r/SOC-000001/
+  -d '{"alert_id":"#1","message":"GeoIP lookup completed.","workflow":"SOC enrichment"}'
 ```
 
 ## Security

@@ -190,7 +190,7 @@ class TestRecordToAlert:
         assert result["source"] == "Elastic"
         assert result["tactic"] == "Initial Access"
         assert result["asset"] == "server01"
-        assert result["status"] == "New"
+        assert result["status"] == "Open"
         assert result["analyst"] == "Unassigned"
 
     def test_kibana_fields(self):

@@ -8,7 +8,7 @@ from soc_tracker.services.alert_service import (
     normalized_datetime,
     sla_status,
     form_values,
-    generate_alert_id,
+    create_alert,
 )
 from soc_tracker.models import Alert
 
@@ -37,7 +37,7 @@ class TestNormalizedDatetime:
 class TestSlaStatus:
     """Test SLA status calculation."""
 
-    def _make_alert(self, status="New", created_hours_ago=0, sla_hours=8):
+    def _make_alert(self, status="Open", created_hours_ago=0, sla_hours=8):
         """Create a mock alert."""
         alert = MagicMock()
         alert.status = status
@@ -52,19 +52,19 @@ class TestSlaStatus:
         assert result["class"] == "sla-closed"
 
     def test_overdue_alert(self):
-        alert = self._make_alert(status="New", created_hours_ago=10, sla_hours=8)
+        alert = self._make_alert(status="Open", created_hours_ago=10, sla_hours=8)
         result = sla_status(alert)
         assert result["label"] == "Overdue"
         assert result["class"] == "sla-overdue"
 
     def test_due_soon_alert(self):
-        alert = self._make_alert(status="New", created_hours_ago=7, sla_hours=8)
+        alert = self._make_alert(status="Open", created_hours_ago=7, sla_hours=8)
         result = sla_status(alert)
         assert "Due in" in result["label"]
         assert result["class"] == "sla-due-soon"
 
     def test_on_track_alert(self):
-        alert = self._make_alert(status="New", created_hours_ago=1, sla_hours=8)
+        alert = self._make_alert(status="Open", created_hours_ago=1, sla_hours=8)
         result = sla_status(alert)
         assert "Due in" in result["label"]
         assert result["class"] == "sla-ok"
@@ -79,7 +79,7 @@ class TestFormValues:
             "description": "Test description",
             "source": "Manual",
             "severity": "High",
-            "status": "New",
+            "status": "Open",
             "analyst": "l1",
             "tactic": "Initial Access",
             "asset": "server01",
@@ -91,7 +91,7 @@ class TestFormValues:
         assert result["description"] == "Test description"
         assert result["source"] == "Manual"
         assert result["severity"] == "High"
-        assert result["status"] == "New"
+        assert result["status"] == "Open"
         assert result["analyst"] == "l1"
         assert result["tactic"] == "Initial Access"
         assert result["asset"] == "server01"
@@ -105,7 +105,7 @@ class TestFormValues:
         assert result["description"] == ""
         assert result["source"] == "Manual"
         assert result["severity"] == "Medium"
-        assert result["status"] == "New"
+        assert result["status"] == "Open"
         assert result["analyst"] == "Unassigned"
         assert result["tactic"] == "Unknown"
         assert result["asset"] == "Unknown"
@@ -160,22 +160,13 @@ class TestFormValues:
         assert result["asset"] == "server01"
 
 
-class TestGenerateAlertId:
-    """Test alert ID generation."""
-
-    def test_format(self):
-        alert_id = generate_alert_id()
-        assert alert_id.startswith("SOC-")
-        assert len(alert_id) == 12  # SOC- + 8 hex chars
-
-    def test_uniqueness(self):
-        ids = set()
-        for _ in range(100):
-            ids.add(generate_alert_id())
-        assert len(ids) == 100  # All unique
-
-    def test_uppercase_hex(self):
-        alert_id = generate_alert_id()
-        hex_part = alert_id[4:]
-        assert hex_part == hex_part.upper()
-        assert all(c in "0123456789ABCDEF" for c in hex_part)
+def test_ticket_numbers_are_sequential(db):
+    values = {
+        "title": "Sequence test", "description": "", "source": "Manual",
+        "severity": "Low", "status": "Open", "analyst": "Unassigned",
+        "tactic": "Unknown", "asset": "Unknown", "sla_hours": 8,
+    }
+    first = create_alert(db, dict(values))
+    second = create_alert(db, dict(values))
+    assert first.alert_id == "#1"
+    assert second.alert_id == "#2"

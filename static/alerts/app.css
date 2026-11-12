@@ -329,6 +329,26 @@ p {
   font-weight: 800;
 }
 
+.status-open {
+  background: #e8edf4;
+  color: #344054;
+}
+
+.status-pending {
+  background: #fff4de;
+  color: #9a5b00;
+}
+
+.status-wip {
+  background: #e6f0ff;
+  color: #175cd3;
+}
+
+.status-closed {
+  background: #e8f5ee;
+  color: #146c43;
+}
+
 .severity-Critical,
 .severity-High {
   color: var(--danger);

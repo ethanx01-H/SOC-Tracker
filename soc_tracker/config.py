@@ -25,12 +25,12 @@ RATE_LIMIT_REQUESTS = int(os.environ.get("RATE_LIMIT_REQUESTS", "120"))
 RATE_LIMIT_WINDOW = int(os.environ.get("RATE_LIMIT_WINDOW", "60"))
 MAX_REQUEST_BYTES = int(os.environ.get("MAX_REQUEST_BYTES", str(25 * 1024 * 1024)))
 MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", str(20 * 1024 * 1024)))
-ALLOWED_EVIDENCE_EXTENSIONS = {".txt", ".log", ".json", ".csv", ".png", ".jpg", ".jpeg", ".pdf", ".pcap", ".pcapng"}
+ALLOWED_EVIDENCE_EXTENSIONS = {".xlsx", ".csv", ".jpg", ".jpeg", ".png", ".txt", ".log", ".json", ".pdf", ".pcap", ".pcapng"}
 
-STATUSES = ["New", "Triage", "Investigating", "Escalated", "Contained", "Closed"]
+STATUSES = ["Open", "Pending", "WIP", "Closed"]
 SEVERITIES = ["Critical", "High", "Medium", "Low"]
 ROLES = ["L1", "L2", "L3"]
-ALEMBIC_HEAD = "0002_add_evidence_audit"
+ALEMBIC_HEAD = "0003_ticket_numbers_and_workflow"
 
 LOGIN_LOCKOUT_THRESHOLD = int(os.environ.get("LOGIN_LOCKOUT_THRESHOLD", "5"))
 LOGIN_LOCKOUT_SECONDS = int(os.environ.get("LOGIN_LOCKOUT_SECONDS", "300"))

@@ -14,7 +14,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from ..config import SEVERITIES, STATUSES, UPLOAD_DIR
-from ..models import Alert, AlertEvent, Evidence, User, generate_alert_id
+from ..models import Alert, AlertEvent, Evidence, User
 
 logger = logging.getLogger("soc_tracker.alert_service")
 
@@ -34,19 +34,19 @@ def create_alert(db: Session, values: dict, user: User | None = None) -> Alert:
             raise ValueError(f"{key.title()} must be text of at most {limit} characters.")
     if not values.get("title", "").strip():
         raise ValueError("Title is required.")
-    if values.get("severity", "Medium") not in SEVERITIES or values.get("status", "New") not in STATUSES:
+    if values.get("severity", "Medium") not in SEVERITIES or values.get("status", "Open") not in STATUSES:
         raise ValueError("Invalid severity or status.")
     if not isinstance(values.get("sla_hours", 8), int) or not 1 <= values.get("sla_hours", 8) <= 8760:
         raise ValueError("SLA hours must be between 1 and 8760.")
-    alert = Alert(alert_id=generate_alert_id(), **values)
+    # Use a unique temporary value until the database allocates the sequential primary key.
+    alert = Alert(alert_id=f"TMP-{secrets.token_hex(4)}", **values)
     alert.iocs = iocs
     if user:
         alert.created_by = user
         alert.updated_by = user
-        if alert.status == "Escalated":
-            alert.escalated_by = user
     db.add(alert)
     db.flush()
+    alert.alert_id = f"#{alert.id}"
     db.add(AlertEvent(
         alert=alert,
         event_type="created",
@@ -171,14 +171,9 @@ def form_values(form: dict) -> dict:
         raise ValueError("Asset must be 160 characters or less.")
 
     severity = form.get("severity", "Medium")
-    status = form.get("status", "New")
-    analyst = form.get("analyst", "Unassigned").strip() or "Unassigned"
+    status = "Open"
     if severity not in SEVERITIES:
         raise ValueError("Select a valid severity.")
-    if status not in STATUSES:
-        raise ValueError("Select a valid status.")
-    if len(analyst) > 80:
-        raise ValueError("Analyst must be 80 characters or less.")
     try:
         sla_hours = int(form.get("sla_hours") or 8)
     except (TypeError, ValueError):
@@ -195,7 +190,7 @@ def form_values(form: dict) -> dict:
         "source": source,
         "severity": severity,
         "status": status,
-        "analyst": analyst,
+        "analyst": "Unassigned",
         "tactic": tactic,
         "asset": asset,
         "iocs": iocs,

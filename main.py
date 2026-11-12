@@ -71,8 +71,7 @@ def run_migrations() -> None:
             return
     if has_app_tables and not has_version_table:
         Base.metadata.create_all(bind=engine)
-        command.stamp(config, "head")
-        return
+        command.stamp(config, "0002_add_evidence_audit")
     command.upgrade(config, "head")
 
 

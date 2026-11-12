@@ -31,18 +31,6 @@
       </select>
     </p>
     <p>
-      <label for="status">Status</label>
-      <select id="status" name="status">
-        {% for status in statuses %}
-          <option value="{{ status }}" {% if form.get('status', 'New') == status %}selected{% endif %}>{{ status }}</option>
-        {% endfor %}
-      </select>
-    </p>
-    <p>
-      <label for="analyst">Analyst</label>
-      <input id="analyst" name="analyst" maxlength="80" value="{{ form.get('analyst', 'Unassigned') }}">
-    </p>
-    <p>
       <label for="tactic">MITRE tactic</label>
       <input id="tactic" name="tactic" maxlength="100" value="{{ form.get('tactic', 'Unknown') }}">
     </p>

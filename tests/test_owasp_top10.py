@@ -91,9 +91,9 @@ def admin_session(client):
     return client
 
 
-def create_test_alert(db, status="New", severity="Medium"):
+def create_test_alert(db, status="Open", severity="Medium"):
     alert = Alert(
-        alert_id="SOC-TEST01", title="Test Alert", description="Test description",
+        alert_id="#TEST01", title="Test Alert", description="Test description",
         source="Manual", severity=severity, status=status, analyst="l1",
         tactic="Initial Access", asset="test-host", iocs_json='["192.168.1.1"]', sla_hours=8,
     )
@@ -130,8 +130,8 @@ class TestA01BrokenAccessControl:
         csrf = get_csrf(l1_session)
         assert l1_session.post(f"/alerts/{alert.id}/delete/", data={"csrf_token": csrf}).status_code == 403
 
-    def test_l1_cannot_edit_escalated(self, l1_session, db):
-        alert = create_test_alert(db, status="Escalated")
+    def test_l1_cannot_edit_closed(self, l1_session, db):
+        alert = create_test_alert(db, status="Closed")
         assert l1_session.get(f"/alerts/{alert.id}/edit/").status_code == 403
 
     def test_l2_cannot_delete_alerts(self, l2_session, db):
@@ -212,7 +212,7 @@ class TestA03Injection:
         for payload in ["<script>alert('xss')</script>", "<img src=x onerror=alert(1)>"]:
             l1_session.post("/alerts/new/", data={
                 "title": payload, "description": "Test", "source": "Manual",
-                "severity": "Low", "status": "New", "csrf_token": csrf,
+                "severity": "Low", "status": "Open", "csrf_token": csrf,
             })
             alert = db.scalar(select(Alert).where(Alert.title == payload))
             assert alert is not None
@@ -252,7 +252,7 @@ class TestA04InsecureDesign:
         assert "Too many failed attempts" in response.text
 
     def test_resolution_summary_required(self, l1_session, db):
-        alert = create_test_alert(db, status="Investigating")
+        alert = create_test_alert(db, status="WIP")
         csrf = get_csrf(l1_session)
         response = l1_session.post(f"/alerts/{alert.id}/close/", data={"resolution_summary": "", "csrf_token": csrf})
         assert "20 characters" in response.text
@@ -399,7 +399,7 @@ class TestA09LoggingMonitoring:
         csrf = get_csrf(l1_session)
         l1_session.post("/alerts/new/", data={
             "title": "Audit Test", "description": "Test", "source": "Manual",
-            "severity": "Low", "status": "New", "csrf_token": csrf,
+            "severity": "Low", "status": "Open", "csrf_token": csrf,
         })
         log = db.scalar(select(AuditLog).where(AuditLog.action == "alert.created"))
         assert log is not None
@@ -424,7 +424,7 @@ class TestA10SSRF:
         response = l1_session.post("/alerts/new/", data={
             "title": "SSRF Test http://evil.com",
             "description": "http://internal-service.local/admin",
-            "source": "Manual", "severity": "Low", "status": "New",
+            "source": "Manual", "severity": "Low", "status": "Open",
             "asset": "http://169.254.169.254/latest/meta-data/",
             "csrf_token": csrf,
         })

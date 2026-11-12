@@ -4,7 +4,7 @@
       <a class="button" href="{{ alert.get_absolute_url() }}">{{ alert.alert_id }}</a>
       <strong>{{ alert.title }}</strong>
       <span class="severity-{{ alert.severity }}">{{ alert.severity }}</span>
-      <span>{{ alert.status }}</span>
+      <span class="pill status-{{ alert.status|lower }}">{{ alert.status }}</span>
       {% set sla = sla_status(alert) %}
       <span class="pill {{ sla.class }}">{{ sla.label }}</span>
       <span>{{ alert.source }}</span>
