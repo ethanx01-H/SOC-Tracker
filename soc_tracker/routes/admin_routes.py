@@ -35,6 +35,7 @@ async def user_create(
     role: Annotated[str, Form()],
     user: UserDep,
     db: Session = Depends(get_db),
+    must_change_password: Annotated[bool, Form()] = False,
 ):
     if not can_manage_users(user):
         raise HTTPException(status_code=403)
@@ -51,7 +52,13 @@ async def user_create(
         return render(request, "admin/users.html", {"users": users, "error": password_error}, db, user)
     if db.scalar(select(User).where(User.username == username)):
         return render(request, "admin/users.html", {"users": users, "error": f"User {username} already exists."}, db, user)
-    db.add(User(username=username, password_hash=hash_password(password), role=role, is_admin=role == "L3"))
+    db.add(User(
+        username=username,
+        password_hash=hash_password(password),
+        role=role,
+        is_admin=role == "L3",
+        must_change_password=must_change_password,
+    ))
     audit(db, user, "user.created", f"Created user {username} with role {role}.", "user", username, request)
     db.commit()
     logger.info("User '%s' created with role %s by %s", username, role, user.username)
@@ -100,6 +107,7 @@ async def user_password_reset(
     if password_error:
         return redirect_to("/admin/users/", password_error)
     target.password_hash = hash_password(password)
+    target.must_change_password = True
     audit(db, user, "user.password_reset", f"Reset password for {target.username}.", "user", target.id, request)
     db.commit()
     logger.info("Password reset for '%s' by %s", target.username, user.username)

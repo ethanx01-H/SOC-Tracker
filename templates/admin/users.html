@@ -31,6 +31,12 @@
           {% endfor %}
         </select>
       </p>
+      <p>
+        <label>
+          <input type="checkbox" name="must_change_password" value="true" checked>
+          Require password change at next login
+        </label>
+      </p>
       <button class="primary" type="submit">Create user</button>
     </form>
   </div>
@@ -42,7 +48,7 @@
         <div class="table-row user-row">
           <strong>{{ managed_user.username }}</strong>
           <span class="pill">{{ managed_user.role }}</span>
-          {% if managed_user.is_admin %}<span class="pill">Admin</span>{% else %}<span></span>{% endif %}
+          {% if managed_user.must_change_password %}<span class="pill">Password change required</span>{% elif managed_user.is_admin %}<span class="pill">Admin</span>{% else %}<span></span>{% endif %}
           <form method="post" action="/admin/users/{{ managed_user.id }}/role/" class="inline-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <select name="role" aria-label="Role for {{ managed_user.username }}">

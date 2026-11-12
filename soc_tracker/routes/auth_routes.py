@@ -106,6 +106,7 @@ async def password_change(
     if new_password != confirm_password:
         return render(request, "account/password.html", {"error": "New passwords do not match."}, db, user)
     user.password_hash = hash_password(new_password)
+    user.must_change_password = False
     audit(db, user, "auth.password_changed", f"{user.username} changed their password.", "user", user.username, request)
     db.commit()
     response = redirect_to("/login/", "Password changed. Sign in with your new password.")

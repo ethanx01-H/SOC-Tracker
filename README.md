@@ -31,7 +31,13 @@ On first startup, database migrations run automatically. In another terminal, cr
 .venv/bin/python -m soc_tracker.manage create-admin admin_l3
 ```
 
-The command prompts you to choose a password. Open `http://127.0.0.1:8080` and sign in as `admin_l3`. A fresh install has no default users or demo tickets; create L1/L2 users from the Users page. Any signed-in user can change their own password from **Change password** in the sidebar. Stop the server with `Ctrl+C`.
+The command prompts you to choose a password. Open `http://127.0.0.1:8080` and sign in as `admin_l3`. A fresh install has no default users or demo tickets; create L1/L2 users from the Users page, then optionally seed synthetic review tickets:
+
+```bash
+.venv/bin/python -m soc_tracker.manage seed-demo
+```
+
+The seed command is disabled when `APP_ENV=production`. New users have **Require password change at next login** enabled by default; the admin can turn it off in the create-user form. Any signed-in user can later change their own password from **Change password** in the sidebar. Stop the server with `Ctrl+C`.
 
 ### Local review accounts
 
@@ -61,7 +67,7 @@ The review deployment listens on `http://127.0.0.1:8080` and creates no default 
 docker compose exec soc-alert-tracker python -m soc_tracker.manage create-admin admin_l3
 ```
 
-The command prompts for the password twice. Create additional analysts from the administrator page. Each user can change their own password from the **Change password** link in the sidebar.
+The command prompts for the password twice. Create L1/L2 users from the administrator page and optionally add five synthetic review tickets with `docker compose exec soc-alert-tracker python -m soc_tracker.manage seed-demo`. The seed command refuses to run in production. New users are required to change their password by default; the admin can disable this when creating the account. Each user can change their own password from the **Change password** link in the sidebar.
 
 This compose setup binds to localhost for review and defaults to non-secure cookies so it works over local HTTP. For production, set `APP_ENV=production` and `COOKIE_SECURE=1`, put the app behind HTTPS, and restrict access to the proxy/network. Do not expose port 8080 directly to the internet. [nginx.conf](nginx.conf) is an example HTTPS reverse proxy configuration; update its hostname and certificate paths before enabling it.
 

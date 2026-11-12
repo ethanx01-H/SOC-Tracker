@@ -41,6 +41,7 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(220))
     role: Mapped[str] = mapped_column(String(2), default="L1")
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)
 
     def __str__(self) -> str:
         return self.username

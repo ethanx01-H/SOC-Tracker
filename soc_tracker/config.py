@@ -32,7 +32,7 @@ ALLOWED_EVIDENCE_EXTENSIONS = {".xlsx", ".csv", ".jpg", ".jpeg", ".png", ".txt",
 STATUSES = ["Open", "Pending", "WIP", "Closed"]
 SEVERITIES = ["Critical", "High", "Medium", "Low"]
 ROLES = ["L1", "L2", "L3"]
-ALEMBIC_HEAD = "0003_ticket_numbers_and_workflow"
+ALEMBIC_HEAD = "0004_password_change_policy"
 
 LOGIN_LOCKOUT_THRESHOLD = int(os.environ.get("LOGIN_LOCKOUT_THRESHOLD", "5"))
 LOGIN_LOCKOUT_SECONDS = int(os.environ.get("LOGIN_LOCKOUT_SECONDS", "300"))

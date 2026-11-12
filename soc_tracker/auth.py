@@ -75,6 +75,8 @@ async def require_user(request: Request, db: Session = Depends(get_db)) -> User:
     """Dependency that requires authentication. Redirects to login if not authenticated."""
     user = current_user(request, db)
     if user:
+        if user.must_change_password and request.url.path != "/account/password/":
+            raise HTTPException(status_code=status.HTTP_303_SEE_OTHER, headers={"Location": "/account/password/"})
         return user
     raise HTTPException(status_code=status.HTTP_303_SEE_OTHER, headers={"Location": "/login/"})
 
