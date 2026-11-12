@@ -28,6 +28,7 @@
             <a href="/admin/users/">Users</a>
             <a href="/admin/audit/">Audit log</a>
           {% endif %}
+          <a href="/account/password/">Change password</a>
         </nav>
         <form action="/logout/" method="post" class="sidebar-footer">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

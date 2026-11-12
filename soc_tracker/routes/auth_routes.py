@@ -9,12 +9,12 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..auth import current_user, hash_password, signer, session_stamp, verify_password
+from ..auth import current_user, hash_password, signer, session_stamp, validate_password_strength, verify_password, UserDep
 from ..config import COOKIE_SECURE, LOGIN_LOCKOUT_SECONDS, LOGIN_LOCKOUT_THRESHOLD, SESSION_TTL_SECONDS
 from ..dependencies import get_db
 from ..middleware import failed_logins
 from ..models import AuditLog, User
-from ..utils import flash, redirect_to, render
+from ..utils import audit, flash, redirect_to, render
 
 logger = logging.getLogger("soc_tracker.auth_routes")
 
@@ -80,5 +80,34 @@ async def login(request: Request, username: Annotated[str, Form()], password: An
 @router.post("/logout/")
 async def logout():
     response = redirect_to("/login/")
+    response.delete_cookie("session")
+    return response
+
+
+@router.get("/account/password/", response_class=HTMLResponse)
+async def password_page(request: Request, user: UserDep, db: Session = Depends(get_db)):
+    return render(request, "account/password.html", {"error": None}, db, user)
+
+
+@router.post("/account/password/")
+async def password_change(
+    request: Request,
+    current_password: Annotated[str, Form()],
+    new_password: Annotated[str, Form()],
+    confirm_password: Annotated[str, Form()],
+    user: UserDep,
+    db: Session = Depends(get_db),
+):
+    if not verify_password(current_password, user.password_hash):
+        return render(request, "account/password.html", {"error": "Current password is incorrect."}, db, user)
+    error = validate_password_strength(new_password)
+    if error:
+        return render(request, "account/password.html", {"error": error}, db, user)
+    if new_password != confirm_password:
+        return render(request, "account/password.html", {"error": "New passwords do not match."}, db, user)
+    user.password_hash = hash_password(new_password)
+    audit(db, user, "auth.password_changed", f"{user.username} changed their password.", "user", user.username, request)
+    db.commit()
+    response = redirect_to("/login/", "Password changed. Sign in with your new password.")
     response.delete_cookie("session")
     return response
