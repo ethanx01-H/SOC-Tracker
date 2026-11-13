@@ -25,6 +25,14 @@ if APP_ENV == "production" and not COOKIE_SECURE:
 SESSION_TTL_SECONDS = int(os.environ.get("SESSION_TTL_SECONDS", "28800"))
 RATE_LIMIT_REQUESTS = int(os.environ.get("RATE_LIMIT_REQUESTS", "120"))
 RATE_LIMIT_WINDOW = int(os.environ.get("RATE_LIMIT_WINDOW", "60"))
+RATE_LIMIT_EXEMPT_PATHS = ("/healthz",)
+RATE_LIMIT_EXEMPT_PREFIXES = ("/static/",)
+# Only these peers may speak for the client through X-Forwarded-For / X-Real-IP.
+TRUSTED_PROXIES = tuple(
+    entry.strip()
+    for entry in os.environ.get("TRUSTED_PROXIES", "127.0.0.1/32,::1/128").split(",")
+    if entry.strip()
+)
 MAX_REQUEST_BYTES = int(os.environ.get("MAX_REQUEST_BYTES", str(25 * 1024 * 1024)))
 MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", str(20 * 1024 * 1024)))
 ALLOWED_EVIDENCE_EXTENSIONS = {".xlsx", ".csv", ".jpg", ".jpeg", ".png", ".txt", ".log", ".json", ".pdf", ".pcap", ".pcapng"}
@@ -42,6 +50,7 @@ ROLES = ["L1", "L2", "L3"]
 ALEMBIC_HEAD = "0005_informational_severity"
 
 LOGIN_LOCKOUT_THRESHOLD = int(os.environ.get("LOGIN_LOCKOUT_THRESHOLD", "5"))
+LOGIN_ACCOUNT_LOCKOUT_THRESHOLD = int(os.environ.get("LOGIN_ACCOUNT_LOCKOUT_THRESHOLD", "10"))
 LOGIN_LOCKOUT_SECONDS = int(os.environ.get("LOGIN_LOCKOUT_SECONDS", "300"))
 
 # Ensure directories exist

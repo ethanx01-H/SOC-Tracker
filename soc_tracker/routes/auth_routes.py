@@ -1,19 +1,19 @@
 """Authentication routes (login, logout)."""
 
 import logging
-import time
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, Request, status
 from fastapi.responses import HTMLResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..auth import current_user, hash_password, signer, session_stamp, validate_password_strength, verify_password, UserDep
-from ..config import COOKIE_SECURE, LOGIN_LOCKOUT_SECONDS, LOGIN_LOCKOUT_THRESHOLD, SESSION_TTL_SECONDS
+from ..config import COOKIE_SECURE, LOGIN_LOCKOUT_SECONDS, SESSION_TTL_SECONDS
 from ..dependencies import get_db
-from ..middleware import failed_logins
+from ..middleware import clear_failed_logins, is_login_locked, record_failed_login
 from ..models import AuditLog, User
+from ..net import client_ip
 from ..utils import audit, flash, redirect_to, render
 
 logger = logging.getLogger("soc_tracker.auth_routes")
@@ -28,33 +28,34 @@ async def login_page(request: Request, db: Session = Depends(get_db)):
 
 @router.post("/login/")
 async def login(request: Request, username: Annotated[str, Form()], password: Annotated[str, Form()], db: Session = Depends(get_db)):
-    client_ip = request.client.host if request.client else "unknown"
+    source_ip = client_ip(request)
 
-    # Login lockout check
-    now = time.monotonic()
-    attempts = failed_logins[client_ip]
-    attempts[:] = [t for t in attempts if now - t < LOGIN_LOCKOUT_SECONDS]
-    if len(attempts) >= LOGIN_LOCKOUT_THRESHOLD:
-        logger.warning("Login lockout triggered for %s", client_ip)
-        return render(request, "registration/login.html", {"error": "Too many failed attempts. Try again later."}, db, None)
+    # Lockout is scoped to this (address, username) pair plus the account itself,
+    # so one analyst's failed attempts cannot lock the whole team out behind a proxy.
+    if is_login_locked(source_ip, username):
+        logger.warning("Login lockout triggered for '%s' from %s", username, source_ip)
+        response = render(request, "registration/login.html", {"error": "Too many failed attempts. Try again later."}, db, None)
+        response.status_code = status.HTTP_429_TOO_MANY_REQUESTS
+        response.headers["Retry-After"] = str(LOGIN_LOCKOUT_SECONDS)
+        return response
 
     user = db.scalar(select(User).where(User.username == username))
     if not user or not verify_password(password, user.password_hash):
-        failed_logins[client_ip].append(now)
+        record_failed_login(source_ip, username)
         db.add(AuditLog(
             actor=user,
             action="auth.login_failed",
             message=f"Failed login attempt for '{username}'.",
             target_type="user",
             target_id=username,
-            source_ip=client_ip,
+            source_ip=source_ip,
         ))
         db.commit()
-        logger.info("Failed login attempt for '%s' from %s", username, client_ip)
+        logger.info("Failed login attempt for '%s' from %s", username, source_ip)
         return render(request, "registration/login.html", {"error": "Invalid username or password."}, db)
 
-    # Clear failed attempts on success
-    failed_logins.pop(client_ip, None)
+    # Clear only this pair's counters on success.
+    clear_failed_logins(source_ip, username)
     response = redirect_to("/")
     response.set_cookie(
         "session",
@@ -70,10 +71,10 @@ async def login(request: Request, username: Annotated[str, Form()], password: An
         message=f"{user.username} logged in.",
         target_type="user",
         target_id=user.username,
-        source_ip=client_ip,
+        source_ip=source_ip,
     ))
     db.commit()
-    logger.info("User '%s' logged in from %s", user.username, client_ip)
+    logger.info("User '%s' logged in from %s", user.username, source_ip)
     return response
 
 

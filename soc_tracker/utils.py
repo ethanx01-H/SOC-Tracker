@@ -19,6 +19,7 @@ from .auth import (
 )
 from .config import BASE_DIR, COOKIE_SECURE, ROLES, SEVERITIES, SEVERITY_LABELS, STATUSES
 from .models import AuditLog, User
+from .net import client_ip
 from .services.alert_service import sla_status
 
 logger = logging.getLogger("soc_tracker.utils")
@@ -88,7 +89,7 @@ def redirect_to(path: str, message: str | None = None) -> RedirectResponse:
 
 def audit(db: Session, actor: User | None, action: str, message: str, target_type: str = "", target_id: str = "", request: Request | None = None) -> None:
     """Add audit log entry."""
-    source_ip = request.client.host if request and request.client else ""
+    source_ip = client_ip(request) if request else ""
     db.add(AuditLog(
         actor=actor,
         action=action,
