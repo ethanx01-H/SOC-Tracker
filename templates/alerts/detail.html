@@ -102,17 +102,18 @@
   <section class="assign-panel">
     <h2>Evidence</h2>
     {% if evidence %}
-      <div class="evidence-grid">
-        {% for item in evidence %}
-          {% if item.is_image %}
+      {% set images = evidence | selectattr('is_image') | list %}
+      {% set documents = evidence | rejectattr('is_image') | list %}
+      {% if images %}
+        <div class="evidence-grid">
+          {% for item in images %}
             <figure class="evidence-card">
               <a class="evidence-open" href="#preview-{{ item.id }}" title="Open {{ item.original_name }}">
                 <img src="/evidence/{{ item.id }}/preview/" alt="{{ item.original_name }}" loading="lazy">
               </a>
               <figcaption>
-                <strong>{{ item.original_name }}</strong>
+                <span class="evidence-name" title="{{ item.original_name }}">{{ item.original_name }}</span>
                 <span class="muted">{{ item.size_bytes }} bytes</span>
-                <a href="/evidence/{{ item.id }}/">Download</a>
               </figcaption>
             </figure>
             <div id="preview-{{ item.id }}" class="lightbox">
@@ -129,17 +130,22 @@
                 </figcaption>
               </figure>
             </div>
-          {% else %}
-            <article class="evidence-card evidence-file">
+          {% endfor %}
+        </div>
+      {% endif %}
+      {% if documents %}
+        <div class="timeline">
+          {% for item in documents %}
+            <article class="timeline-item">
               <div>
                 <strong><a href="/evidence/{{ item.id }}/">{{ item.original_name }}</a></strong>
                 <span class="muted">{{ item.size_bytes }} bytes</span>
               </div>
               <p class="muted">SHA-256 {{ item.sha256 }}</p>
             </article>
-          {% endif %}
-        {% endfor %}
-      </div>
+          {% endfor %}
+        </div>
+      {% endif %}
     {% else %}
       <div class="empty">No evidence attached</div>
     {% endif %}

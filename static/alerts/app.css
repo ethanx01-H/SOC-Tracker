@@ -552,24 +552,33 @@ p {
 
 .evidence-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 4px;
 }
 
 .evidence-card {
   margin: 0;
-  padding: 10px;
+  padding: 6px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--panel-strong);
 }
 
 .evidence-card figcaption {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin-top: 8px;
-  font-size: 0.85rem;
+  gap: 2px;
+  margin-top: 6px;
+  font-size: 0.75rem;
+  line-height: 1.3;
+}
+
+.evidence-name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .evidence-open {
@@ -579,23 +588,11 @@ p {
 .evidence-open img {
   display: block;
   width: 100%;
-  height: 130px;
+  height: 84px;
   object-fit: cover;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: 5px;
   background: var(--field);
-}
-
-.evidence-file {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.evidence-file p {
-  margin: 0;
-  font-size: 0.75rem;
-  word-break: break-all;
 }
 
 .lightbox {
@@ -664,5 +661,9 @@ p {
   .table-row,
   .detail-grid {
     grid-template-columns: 1fr;
+  }
+
+  .evidence-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

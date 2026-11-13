@@ -179,7 +179,7 @@ Create users, manage roles (L1/L2/L3), and reset passwords.
 - Optional IOCs when creating tickets; close summaries have no application-level word-count limit
 - Filter by severity, status, search terms; CSV export of filtered results
 - Evidence is attached when the ticket is created; there is no later upload, so a ticket's evidence is exactly what the analyst filed with it
-- Every file is stored with its SHA-256 recorded; PNG and JPEG open in an in-page preview popup, everything else downloads
+- Every file is stored with its SHA-256 recorded; PNG and JPEG appear as small thumbnails (four per row) that open a full-size popup, everything else is listed as a normal row that downloads
 - Evidence uploads accept `.xlsx`, `.csv`, `.jpg`, `.jpeg`, `.png`, `.txt`, `.log`, `.json`, `.pdf`, `.pcap`, `.pcapng`, up to 20 MB each (25 MB per submission); a rejected file cancels the whole create, so no half-made ticket is left behind
 - Investigation notes and activity-log timeline per alert
 
