@@ -126,6 +126,15 @@ def is_partial_request(request: Request) -> bool:
     return request.headers.get("x-partial") == "1"
 
 
+def is_local_path(path: str) -> bool:
+    """True for a same-site absolute path.
+
+    Redirect targets that come from a form field have to be checked: ``//evil.example``
+    is a protocol-relative URL, not a local path.
+    """
+    return bool(path) and path.startswith("/") and not path.startswith("//") and "\\" not in path
+
+
 def page_url(request: Request, page: int) -> str:
     """Current URL with the page number replaced, other filters preserved."""
     params = [(key, value) for key, value in request.query_params.multi_items() if key != "page"]

@@ -1,6 +1,12 @@
-<form method="post" action="/alerts/bulk/" class="bulk-form">
+<form method="post" action="/alerts/bulk/" class="bulk-form" data-bulk-form>
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="next" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
   <div class="bulk-toolbar">
+    <label class="bulk-all" for="bulk-all">
+      <input type="checkbox" id="bulk-all" data-bulk-all aria-label="Select every ticket on this page">
+      <span>Select all</span>
+    </label>
+    <span class="muted" data-bulk-count>0 selected</span>
     <label for="bulk-action">Bulk action</label>
     <select id="bulk-action" name="action">
       <option value="assign_me">Assign selected to me</option>
@@ -8,12 +14,12 @@
       <option value="status:Pending">Set selected to Pending</option>
       <option value="status:Open">Set selected to Open</option>
     </select>
-    <button type="submit">Apply to selected</button>
+    <button type="submit" data-bulk-apply disabled>Apply to selected</button>
   </div>
   <div class="table">
   {% for alert in alerts %}
     <div class="table-row">
-      <input type="checkbox" class="row-check" name="ids" value="{{ alert.id }}" aria-label="Select {{ alert.alert_id }}">
+      <input type="checkbox" class="row-check" name="ids" value="{{ alert.id }}" data-row-check aria-label="Select {{ alert.alert_id }}">
       <a class="button" href="{{ alert.get_absolute_url() }}">{{ alert.alert_id }}</a>
       <strong>{{ alert.title }}</strong>
       <span class="severity-{{ alert.severity }}">{{ alert.severity }}</span>

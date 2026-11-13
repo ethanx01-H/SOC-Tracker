@@ -120,6 +120,49 @@ def test_search_by_analyst_ignores_timeline_text(client, sessions):
     assert "Unassigned ticket" not in page.text
 
 
+def test_bulk_returns_to_the_page_it_came_from(client, sessions):
+    db = sessions()
+    user = db.scalar(select(User).where(User.username == "l2"))
+    alert = seed_alert(db, user, "Return ticket")
+    db.close()
+
+    token = sign_in(client)
+    response = client.post("/alerts/bulk/", data={
+        "csrf_token": token, "action": "status:WIP", "ids": [str(alert.id)],
+        "next": "/alerts/mine/?severity=High",
+    })
+    assert response.status_code == 303
+    assert response.headers["location"] == "/alerts/mine/?severity=High"
+
+
+def test_bulk_ignores_an_offsite_next(client, sessions):
+    db = sessions()
+    user = db.scalar(select(User).where(User.username == "l2"))
+    alert = seed_alert(db, user, "Offsite ticket")
+    db.close()
+
+    token = sign_in(client)
+    response = client.post("/alerts/bulk/", data={
+        "csrf_token": token, "action": "status:WIP", "ids": [str(alert.id)],
+        "next": "//evil.example/x",
+    })
+    assert response.headers["location"] == "/alerts/"
+
+
+def test_bulk_toolbar_reports_selection_state(client, sessions):
+    db = sessions()
+    user = db.scalar(select(User).where(User.username == "l2"))
+    seed_alert(db, user, "Toolbar ticket")
+    db.close()
+
+    sign_in(client)
+    page = client.get("/alerts/")
+    assert "data-bulk-all" in page.text
+    assert "data-bulk-count" in page.text
+    # Apply stays disabled until something is ticked.
+    assert "data-bulk-apply disabled" in page.text
+
+
 def test_bulk_assign_to_me(client, sessions):
     db = sessions()
     user = db.scalar(select(User).where(User.username == "l2"))

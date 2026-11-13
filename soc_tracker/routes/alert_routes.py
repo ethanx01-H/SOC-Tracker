@@ -34,7 +34,7 @@ from ..services import merge_service, notify, sla_service
 from ..services.chart_service import chart_counts
 from ..services.evidence_service import EvidenceError, read_upload, store_evidence
 from ..config import PUBLIC_BASE_URL
-from ..utils import audit, is_partial_request, page_url, redirect_to, render
+from ..utils import audit, is_local_path, is_partial_request, page_url, redirect_to, render
 
 logger = logging.getLogger("soc_tracker.alert_routes")
 
@@ -509,12 +509,16 @@ def alert_bulk(
     user: User = Depends(require_user),
     ids: Annotated[list[str] | None, Form()] = None,
     action: Annotated[str, Form()] = "",
+    return_to: Annotated[str, Form(alias="next")] = "",
 ):
     """Apply one action to several tickets at once.
 
     Every ticket is checked individually: a bulk action must not quietly skip the
     permission rules that a single-ticket action enforces.
     """
+    # Send the analyst back where they were. Landing on the unfiltered queue after
+    # a bulk action made the change look like it had not happened.
+    back = return_to if is_local_path(return_to) else "/alerts/"
     selected: list[int] = []
     for raw in ids or []:
         try:
@@ -522,7 +526,7 @@ def alert_bulk(
         except (TypeError, ValueError):
             continue
     if not selected:
-        return redirect_to("/alerts/", "Select at least one ticket first.")
+        return redirect_to(back, "Select at least one ticket first.")
 
     alerts = list(db.scalars(select(Alert).where(Alert.id.in_(selected))))
     changed = 0
@@ -570,4 +574,4 @@ def alert_bulk(
     message = f"Updated {changed} ticket(s)."
     if skipped:
         message += f" {skipped} skipped (closed, or not permitted)."
-    return redirect_to("/alerts/", message)
+    return redirect_to(back, message)

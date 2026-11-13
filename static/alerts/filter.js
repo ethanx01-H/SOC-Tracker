@@ -36,6 +36,7 @@
       if (!response.ok) throw new Error("HTTP " + response.status);
       results.innerHTML = await response.text();
       history.replaceState(null, "", url);
+      document.dispatchEvent(new CustomEvent("alerts:refreshed"));
     } catch (error) {
       if (error.name === "AbortError") return;
       // Showing results that no longer match the box is worse than a reload.

@@ -806,3 +806,27 @@ body.lightbox-open {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+.bulk-all {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.bulk-all input,
+.row-check {
+  cursor: pointer;
+}
+
+.bulk-toolbar button[type="submit"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.bulk-toolbar [data-bulk-count] {
+  min-width: 86px;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
