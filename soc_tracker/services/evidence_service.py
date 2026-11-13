@@ -33,8 +33,12 @@ def secure_upload_name(filename: str) -> str:
     return name or "evidence.bin"
 
 
-async def read_upload(upload: UploadFile) -> tuple[str, bytes]:
-    """Validate and read one upload. Raises EvidenceError on a rejected file."""
+def read_upload(upload: UploadFile) -> tuple[str, bytes]:
+    """Validate and read one upload. Raises EvidenceError on a rejected file.
+
+    Synchronous on purpose: routes are plain ``def`` so this blocking read runs
+    in Starlette's thread pool instead of stalling the event loop.
+    """
     name = secure_upload_name(upload.filename or "evidence.bin")
     extension = Path(name).suffix.lower()
     if extension not in ALLOWED_EVIDENCE_EXTENSIONS:
@@ -42,12 +46,14 @@ async def read_upload(upload: UploadFile) -> tuple[str, bytes]:
 
     chunks = []
     total = 0
-    while chunk := await upload.read(min(CHUNK, MAX_UPLOAD_BYTES + 1 - total)):
-        total += len(chunk)
-        if total > MAX_UPLOAD_BYTES:
-            await upload.close()
-            raise EvidenceError(f"{name} is larger than {MAX_UPLOAD_BYTES // (1024 * 1024)} MB.")
-        chunks.append(chunk)
+    try:
+        while chunk := upload.file.read(min(CHUNK, MAX_UPLOAD_BYTES + 1 - total)):
+            total += len(chunk)
+            if total > MAX_UPLOAD_BYTES:
+                raise EvidenceError(f"{name} is larger than {MAX_UPLOAD_BYTES // (1024 * 1024)} MB.")
+            chunks.append(chunk)
+    finally:
+        upload.file.close()
     return name, b"".join(chunks)
 
 

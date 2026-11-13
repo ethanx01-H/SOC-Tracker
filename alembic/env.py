@@ -1,13 +1,15 @@
 from logging.config import fileConfig
-import os
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
+from soc_tracker.config import DATABASE_URL
 from soc_tracker.models import Base
 
 config = context.config
-config.set_main_option("sqlalchemy.url", f"sqlite:///{os.environ.get('SQLITE_PATH', 'data/fastapi.sqlite3')}")
+# Percent signs in a password would be read as config interpolation, so escape
+# them before handing the URL to Alembic.
+config.set_main_option("sqlalchemy.url", DATABASE_URL.replace("%", "%%"))
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

@@ -30,7 +30,7 @@ def _stored_path(evidence: Evidence) -> Path:
 
 
 @router.get("/evidence/{evidence_id}/")
-async def evidence_download(evidence_id: int, user: UserDep, db: Session = Depends(get_db)):
+def evidence_download(evidence_id: int, user: UserDep, db: Session = Depends(get_db)):
     evidence = db.get(Evidence, evidence_id)
     if not evidence:
         raise HTTPException(status_code=404)
@@ -44,7 +44,7 @@ async def evidence_download(evidence_id: int, user: UserDep, db: Session = Depen
 
 
 @router.get("/evidence/{evidence_id}/preview/")
-async def evidence_preview(evidence_id: int, user: UserDep, db: Session = Depends(get_db)):
+def evidence_preview(evidence_id: int, user: UserDep, db: Session = Depends(get_db)):
     """Serve an image inline so the ticket can show it in a popup.
 
     The media type comes from the extension, not from the stored upload header:

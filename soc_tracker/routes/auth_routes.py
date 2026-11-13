@@ -22,12 +22,12 @@ router = APIRouter()
 
 
 @router.get("/login/", response_class=HTMLResponse)
-async def login_page(request: Request, db: Session = Depends(get_db)):
+def login_page(request: Request, db: Session = Depends(get_db)):
     return render(request, "registration/login.html", {"error": None}, db)
 
 
 @router.post("/login/")
-async def login(request: Request, username: Annotated[str, Form()], password: Annotated[str, Form()], db: Session = Depends(get_db)):
+def login(request: Request, username: Annotated[str, Form()], password: Annotated[str, Form()], db: Session = Depends(get_db)):
     source_ip = client_ip(request)
 
     # Lockout is scoped to this (address, username) pair plus the account itself,
@@ -94,19 +94,19 @@ async def login(request: Request, username: Annotated[str, Form()], password: An
 
 
 @router.post("/logout/")
-async def logout():
+def logout():
     response = redirect_to("/login/")
     response.delete_cookie("session")
     return response
 
 
 @router.get("/account/password/", response_class=HTMLResponse)
-async def password_page(request: Request, user: UserDep, db: Session = Depends(get_db)):
+def password_page(request: Request, user: UserDep, db: Session = Depends(get_db)):
     return render(request, "account/password.html", {"error": None}, db, user)
 
 
 @router.post("/account/password/")
-async def password_change(
+def password_change(
     request: Request,
     current_password: Annotated[str, Form()],
     new_password: Annotated[str, Form()],

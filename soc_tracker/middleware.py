@@ -3,7 +3,6 @@
 import logging
 import re
 import time
-from collections import defaultdict, deque
 from urllib.parse import parse_qs
 
 from fastapi import Request, Response
@@ -11,81 +10,31 @@ from fastapi.responses import JSONResponse
 
 from .config import (
     COOKIE_SECURE,
-    LOGIN_ACCOUNT_LOCKOUT_THRESHOLD,
-    LOGIN_LOCKOUT_SECONDS,
-    LOGIN_LOCKOUT_THRESHOLD,
     MAX_REQUEST_BYTES,
     RATE_LIMIT_EXEMPT_PATHS,
     RATE_LIMIT_EXEMPT_PREFIXES,
     RATE_LIMIT_REQUESTS,
     RATE_LIMIT_WINDOW,
 )
+from .limiter import (
+    clear_failed_logins,
+    get_store,
+    is_login_locked,
+    record_failed_login,
+    reset_security_state,
+)
 from .net import client_ip
+from .services import metrics
 
 logger = logging.getLogger("soc_tracker.middleware")
 
-rate_limits: dict[str, deque[float]] = defaultdict(deque)
-# Keyed by "ip|username": a shared NAT or proxy address must not let one
-# analyst's typos lock the rest of the team out.
-failed_logins: dict[str, list[float]] = defaultdict(list)
-# Keyed by username alone: stops a distributed spray that rotates addresses.
-account_failures: dict[str, list[float]] = defaultdict(list)
-
-
-def _username_key(username: str) -> str:
-    return (username or "").strip().lower()
-
-
-def _pair_key(client_address: str, username: str) -> str:
-    return f"{client_address}|{_username_key(username)}"
-
-
-def _prune(bucket: dict[str, list[float]], key: str, now: float, window: int) -> list[float]:
-    entries = bucket[key]
-    if entries:
-        entries[:] = [stamp for stamp in entries if now - stamp < window]
-    return entries
-
-
-def is_login_locked(client_address: str, username: str, now: float | None = None) -> bool:
-    """True when this (address, username) pair or the account itself is locked out."""
-    now = time.monotonic() if now is None else now
-    per_pair = _prune(failed_logins, _pair_key(client_address, username), now, LOGIN_LOCKOUT_SECONDS)
-    per_account = _prune(account_failures, _username_key(username), now, LOGIN_LOCKOUT_SECONDS)
-    return len(per_pair) >= LOGIN_LOCKOUT_THRESHOLD or len(per_account) >= LOGIN_ACCOUNT_LOCKOUT_THRESHOLD
-
-
-def record_failed_login(client_address: str, username: str, now: float | None = None) -> None:
-    now = time.monotonic() if now is None else now
-    failed_logins[_pair_key(client_address, username)].append(now)
-    account_failures[_username_key(username)].append(now)
-    _bound_lockout_memory()
-
-
-def clear_failed_logins(client_address: str, username: str) -> None:
-    """Clear only this pair's counters after a successful login.
-
-    Clearing the whole address bucket (the previous behaviour) let one valid
-    login wipe the protection for every other account behind the same proxy.
-    """
-    failed_logins.pop(_pair_key(client_address, username), None)
-    account_failures.pop(_username_key(username), None)
-
-
-def _bound_lockout_memory() -> None:
-    if len(failed_logins) > 10000:
-        for key in list(failed_logins)[:2000]:
-            failed_logins.pop(key, None)
-    if len(account_failures) > 10000:
-        for key in list(account_failures)[:2000]:
-            account_failures.pop(key, None)
-
-
-def reset_security_state() -> None:
-    """Drop all in-process limiter and lockout state (used by tests)."""
-    rate_limits.clear()
-    failed_logins.clear()
-    account_failures.clear()
+__all__ = [
+    "security_middleware",
+    "is_login_locked",
+    "record_failed_login",
+    "clear_failed_logins",
+    "reset_security_state",
+]
 
 
 def _is_rate_limit_exempt(path: str) -> bool:
@@ -94,7 +43,6 @@ def _is_rate_limit_exempt(path: str) -> bool:
 
 async def security_middleware(request: Request, call_next):
     """Combined middleware for rate limiting, CSRF, and security headers."""
-    now = time.monotonic()
     client_address = client_ip(request)
     path = request.url.path
 
@@ -109,22 +57,13 @@ async def security_middleware(request: Request, call_next):
     # Rate limiting. Health checks and static assets are excluded: the container
     # healthcheck must never 429 itself, and one page view pulls several assets.
     if not _is_rate_limit_exempt(path):
-        attempts = rate_limits[client_address]
-        while attempts and now - attempts[0] > RATE_LIMIT_WINDOW:
-            attempts.popleft()
-        if len(attempts) >= RATE_LIMIT_REQUESTS:
+        if not get_store().hit(client_address, RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW):
             logger.warning("Rate limit exceeded for %s on %s", client_address, path)
             return JSONResponse(
                 {"ok": False, "error": "rate limit exceeded"},
                 status_code=429,
                 headers={"Retry-After": str(RATE_LIMIT_WINDOW)},
             )
-        attempts.append(now)
-        # Bound memory use when clients rotate source addresses.
-        if len(rate_limits) > 10000:
-            for key in list(rate_limits)[:2000]:
-                rate_limits.pop(key, None)
-    _bound_lockout_memory()
 
     # CSRF check — skip only for webhook API endpoints
     if request.method in {"POST", "PUT", "PATCH", "DELETE"} and not path.startswith("/api/webhook"):
@@ -156,7 +95,13 @@ async def security_middleware(request: Request, call_next):
             logger.warning("CSRF token mismatch from %s on %s", client_address, path)
             return JSONResponse({"ok": False, "error": "invalid csrf token"}, status_code=403)
 
-    response = await call_next(request)
+    started = time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        metrics.record_request(request.method, 500, time.perf_counter() - started)
+        raise
+    metrics.record_request(request.method, response.status_code, time.perf_counter() - started)
 
     # Security headers
     response.headers["X-Content-Type-Options"] = "nosniff"

@@ -74,7 +74,7 @@ def current_user(request: Request, db: Session) -> User | None:
     return user
 
 
-async def require_user(request: Request, db: Session = Depends(get_db)) -> User:
+def require_user(request: Request, db: Session = Depends(get_db)) -> User:
     """Dependency that requires authentication. Redirects to login if not authenticated."""
     user = current_user(request, db)
     if user:

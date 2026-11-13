@@ -20,7 +20,7 @@ router = APIRouter()
 
 
 @router.get("/admin/users/", response_class=HTMLResponse)
-async def user_admin(request: Request, user: UserDep, db: Session = Depends(get_db)):
+def user_admin(request: Request, user: UserDep, db: Session = Depends(get_db)):
     if not can_manage_users(user):
         raise HTTPException(status_code=403)
     users = list(db.scalars(select(User).order_by(User.username)))
@@ -28,7 +28,7 @@ async def user_admin(request: Request, user: UserDep, db: Session = Depends(get_
 
 
 @router.post("/admin/users/")
-async def user_create(
+def user_create(
     request: Request,
     username: Annotated[str, Form()],
     password: Annotated[str, Form()],
@@ -66,7 +66,7 @@ async def user_create(
 
 
 @router.post("/admin/users/{user_id}/role/")
-async def user_role_update(
+def user_role_update(
     request: Request,
     user_id: int,
     role: Annotated[str, Form()],
@@ -91,7 +91,7 @@ async def user_role_update(
 
 
 @router.post("/admin/users/{user_id}/password/")
-async def user_password_reset(
+def user_password_reset(
     request: Request,
     user_id: int,
     password: Annotated[str, Form()],
@@ -115,7 +115,7 @@ async def user_password_reset(
 
 
 @router.post("/admin/users/{user_id}/active/")
-async def user_set_active(
+def user_set_active(
     request: Request,
     user_id: int,
     is_active: Annotated[str, Form()],
@@ -151,7 +151,7 @@ async def user_set_active(
 
 
 @router.post("/admin/users/{user_id}/delete/")
-async def user_delete(
+def user_delete(
     request: Request,
     user_id: int,
     user: UserDep,
@@ -232,7 +232,7 @@ def describe_history(history: dict[str, int]) -> str:
 
 
 @router.get("/admin/audit/", response_class=HTMLResponse)
-async def audit_log_page(request: Request, user: UserDep, db: Session = Depends(get_db)):
+def audit_log_page(request: Request, user: UserDep, db: Session = Depends(get_db)):
     if not can_manage_users(user):
         raise HTTPException(status_code=403)
     logs = list(db.scalars(select(AuditLog).order_by(AuditLog.created_at.desc()).limit(200)))

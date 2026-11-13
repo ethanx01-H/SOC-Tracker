@@ -5,10 +5,11 @@ import json
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, Body, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from typing import Annotated, Any
 
 from alerts.elastic import parse_elastic_alerts, record_to_alert, records_from
 
@@ -32,14 +33,14 @@ def api_key_valid(request: Request) -> bool:
 
 
 @router.get("/elastic/import/", response_class=HTMLResponse)
-async def elastic_import_page(request: Request, user: UserDep, db: Session = Depends(get_db)):
+def elastic_import_page(request: Request, user: UserDep, db: Session = Depends(get_db)):
     if not can_create_alert(user):
         raise HTTPException(status_code=403)
     return render(request, "alerts/elastic_import.html", {"raw_json": "", "error": None}, db, user)
 
 
 @router.post("/elastic/import/")
-async def elastic_import(request: Request, raw_json: Annotated[str, Form()], user: UserDep, db: Session = Depends(get_db)):
+def elastic_import(request: Request, raw_json: Annotated[str, Form()], user: UserDep, db: Session = Depends(get_db)):
     if not can_create_alert(user):
         raise HTTPException(status_code=403)
     try:
@@ -65,14 +66,10 @@ async def elastic_import(request: Request, raw_json: Annotated[str, Form()], use
 
 @router.post("/api/webhook/n8n")
 @router.post("/api/webhook/n8n/")
-async def n8n_webhook(request: Request, db: Session = Depends(get_db)):
+def n8n_webhook(request: Request, payload: Any = Body(None), db: Session = Depends(get_db)):
     if not api_key_valid(request):
         logger.warning("Invalid API key attempt from %s", client_ip(request))
         return JSONResponse({"ok": False, "error": "invalid api key"}, status_code=401)
-    try:
-        payload = await request.json()
-    except json.JSONDecodeError as error:
-        return JSONResponse({"ok": False, "error": str(error)}, status_code=400)
     records = records_from(payload)
     if not records:
         return JSONResponse({"ok": False, "error": "no alert records found"}, status_code=400)
@@ -107,13 +104,9 @@ async def n8n_webhook(request: Request, db: Session = Depends(get_db)):
 
 @router.post("/api/webhook/n8n/logs")
 @router.post("/api/webhook/n8n/logs/")
-async def n8n_log_webhook(request: Request, db: Session = Depends(get_db)):
+def n8n_log_webhook(request: Request, payload: Any = Body(None), db: Session = Depends(get_db)):
     if not api_key_valid(request):
         return JSONResponse({"ok": False, "error": "invalid api key"}, status_code=401)
-    try:
-        payload = await request.json()
-    except json.JSONDecodeError as error:
-        return JSONResponse({"ok": False, "error": str(error)}, status_code=400)
     if not isinstance(payload, dict):
         return JSONResponse({"ok": False, "error": "JSON object required"}, status_code=400)
     nested_alert = payload.get("alert") if isinstance(payload.get("alert"), dict) else {}

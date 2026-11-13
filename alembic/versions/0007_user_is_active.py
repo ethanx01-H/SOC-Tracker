@@ -11,9 +11,12 @@ depends_on = None
 
 
 def upgrade():
+    # Postgres rejects DEFAULT 1 on a boolean column, so the literal follows the
+    # dialect. SQLite keeps 1 so the existing databases do not show drift.
+    default = sa.text("true") if op.get_bind().dialect.name != "sqlite" else sa.text("1")
     with op.batch_alter_table("fastapi_users") as batch_op:
         batch_op.add_column(
-            sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("1"))
+            sa.Column("is_active", sa.Boolean(), nullable=False, server_default=default)
         )
 
 

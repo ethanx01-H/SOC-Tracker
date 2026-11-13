@@ -11,6 +11,27 @@ DATA_DIR = BASE_DIR / "data"
 UPLOAD_DIR = DATA_DIR / "evidence"
 SQLITE_PATH = os.environ.get("SQLITE_PATH", str(DATA_DIR / "fastapi.sqlite3"))
 Path(SQLITE_PATH).expanduser().resolve().parent.mkdir(parents=True, exist_ok=True)
+
+
+def normalise_database_url(url: str) -> str:
+    """Route any Postgres URL through psycopg 3.
+
+    A DBA will hand over ``postgresql://user:pass@host/db``; SQLAlchemy reads
+    that scheme as psycopg2, which this image does not ship. Rewriting the
+    scheme here means the URL can be pasted in unchanged.
+    """
+    for prefix in ("postgres://", "postgresql://"):
+        if url.startswith(prefix):
+            return "postgresql+psycopg://" + url[len(prefix):]
+    return url
+
+
+DATABASE_URL = normalise_database_url(os.environ.get("DATABASE_URL") or f"sqlite:///{SQLITE_PATH}")
+DB_IS_SQLITE = DATABASE_URL.startswith("sqlite")
+DB_IS_POSTGRES = DATABASE_URL.startswith("postgresql")
+DB_POOL_SIZE = int(os.environ.get("DB_POOL_SIZE", "10"))
+DB_POOL_MAX_OVERFLOW = int(os.environ.get("DB_POOL_MAX_OVERFLOW", "20"))
+WEB_CONCURRENCY = int(os.environ.get("WEB_CONCURRENCY", "1"))
 APP_ENV = os.environ.get("APP_ENV", "development").lower()
 N8N_API_KEY = os.environ.get("N8N_API_KEY") or (None if APP_ENV == "production" else secrets.token_urlsafe(32))
 N8N_API_HEADER = os.environ.get("N8N_API_HEADER", "X-API-Key")
@@ -25,7 +46,7 @@ if APP_ENV == "production" and not COOKIE_SECURE:
 SESSION_TTL_SECONDS = int(os.environ.get("SESSION_TTL_SECONDS", "28800"))
 RATE_LIMIT_REQUESTS = int(os.environ.get("RATE_LIMIT_REQUESTS", "120"))
 RATE_LIMIT_WINDOW = int(os.environ.get("RATE_LIMIT_WINDOW", "60"))
-RATE_LIMIT_EXEMPT_PATHS = ("/healthz",)
+RATE_LIMIT_EXEMPT_PATHS = ("/healthz", "/metrics")
 RATE_LIMIT_EXEMPT_PREFIXES = ("/static/",)
 # Only these peers may speak for the client through X-Forwarded-For / X-Real-IP.
 TRUSTED_PROXIES = tuple(
@@ -49,11 +70,43 @@ SEVERITY_LABELS = {
 ROLES = ["L1", "L2", "L3"]
 # Timestamps are stored in UTC and rendered in this zone for analysts.
 DISPLAY_TIMEZONE = os.environ.get("DISPLAY_TIMEZONE", "Asia/Yangon")
-ALEMBIC_HEAD = "0008_query_indexes"
+ALEMBIC_HEAD = "0009_retention_sla_merge"
 
 LOGIN_LOCKOUT_THRESHOLD = int(os.environ.get("LOGIN_LOCKOUT_THRESHOLD", "5"))
 LOGIN_ACCOUNT_LOCKOUT_THRESHOLD = int(os.environ.get("LOGIN_ACCOUNT_LOCKOUT_THRESHOLD", "10"))
 LOGIN_LOCKOUT_SECONDS = int(os.environ.get("LOGIN_LOCKOUT_SECONDS", "300"))
+
+# Shared limiter/lockout store. Without it, counters live in each worker's
+# memory, so N workers multiply every limit by N and a lockout only applies to
+# the worker that saw the failed attempt.
+REDIS_URL = os.environ.get("REDIS_URL") or None
+
+# Retention and archival. The README promises 730 days; the job enforces it.
+RETENTION_DAYS = int(os.environ.get("RETENTION_DAYS", "730"))
+ARCHIVE_DIR = Path(os.environ.get("ARCHIVE_DIR", str(DATA_DIR / "archive")))
+AUDIT_EXPORT_DIR = Path(os.environ.get("AUDIT_EXPORT_DIR", str(DATA_DIR / "audit-exports")))
+BACKUP_DIR = Path(os.environ.get("BACKUP_DIR", str(BASE_DIR / "backups")))
+# A snapshot older than this makes /healthz report degraded.
+BACKUP_MAX_AGE_HOURS = int(os.environ.get("BACKUP_MAX_AGE_HOURS", "36"))
+# Bearer token for /metrics. Unset means /metrics only answers on loopback.
+METRICS_TOKEN = os.environ.get("METRICS_TOKEN") or None
+
+# Outbound notifications. Both channels stay inert until they are configured.
+SMTP_HOST = os.environ.get("SMTP_HOST") or None
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
+SMTP_USER = os.environ.get("SMTP_USER") or None
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD") or None
+SMTP_STARTTLS = os.environ.get("SMTP_STARTTLS", "1") == "1"
+NOTIFY_EMAIL_FROM = os.environ.get("NOTIFY_EMAIL_FROM") or SMTP_USER
+NOTIFY_EMAIL_TO = tuple(
+    entry.strip() for entry in os.environ.get("NOTIFY_EMAIL_TO", "").split(",") if entry.strip()
+)
+NOTIFY_TEAMS_WEBHOOK = os.environ.get("NOTIFY_TEAMS_WEBHOOK") or None
+NOTIFY_ON_ASSIGN = os.environ.get("NOTIFY_ON_ASSIGN", "1") == "1"
+NOTIFY_ON_ESCALATE = os.environ.get("NOTIFY_ON_ESCALATE", "1") == "1"
+# New tickets notify only at this severity or above.
+NOTIFY_MIN_SEVERITY = os.environ.get("NOTIFY_MIN_SEVERITY", "High")
+PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL") or ""
 
 # Ensure directories exist
 DATA_DIR.mkdir(exist_ok=True)
