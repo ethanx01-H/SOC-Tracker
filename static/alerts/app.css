@@ -369,6 +369,13 @@ p {
   text-decoration: underline;
 }
 
+/* Long tactic names ("Reconnaissance") have no break opportunity and used to
+   spill over the chart next to them. */
+.pie-legend span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .user-row {
   grid-template-columns: minmax(120px, 1fr) 80px 90px minmax(220px, 1fr) minmax(260px, 1fr);
 }
