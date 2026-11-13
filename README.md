@@ -217,7 +217,8 @@ Create users, manage roles (L1/L2/L3), and reset passwords.
 - Dashboard date ranges (24 hours, 7, 30, 90 days, all time) applied to the counts, charts and queue
 - Bulk actions on the queue: assign selected tickets to yourself, or move them to WIP/Pending/Open
 - Duplicate handling: tickets filed within 24 hours with the same title or asset are listed on the ticket, and L2/L3 can merge one into another — the timeline and evidence move to the surviving ticket, and the duplicate closes pointing at it
-- SLA breach history: a sweep records each missed due date and, on closure, how late the ticket actually was; the dashboard shows the totals
+- SLA breach history: a sweep records each missed due date and, on closure, how late the ticket actually was; the totals are exposed on `/metrics` and by `python -m soc_tracker.manage sla-sweep`
+- Search matches ticket number, title, description, asset, source, analyst and IOC, and filters apply in place without reloading the page or losing your scroll position
 - Notifications by email and Microsoft Teams on new high-severity tickets, assignment and escalation — each channel stays inert until it is configured
 - Evidence is attached when the ticket is created; there is no later upload, so a ticket's evidence is exactly what the analyst filed with it
 - Every file is stored with its SHA-256 recorded; PNG and JPEG appear as small thumbnails (four per row) that open a full-size popup, everything else is listed as a normal row that downloads

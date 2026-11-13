@@ -1,0 +1,16 @@
+{% set count = total if total is defined else alerts|length %}
+<div class="results-bar">
+  <span class="muted">
+    {{ count }} ticket{% if count != 1 %}s{% endif %}{% if total_pages is defined and total_pages > 1 %} · page {{ page }} of {{ total_pages }}{% endif %}
+  </span>
+  {% if request.query_params.get('q') or request.query_params.get('severity') or request.query_params.get('status') or request.query_params.get('sla') %}
+    <a class="button" href="{{ request.url.path }}" data-clear>Clear filters</a>
+  {% endif %}
+</div>
+{% include "alerts/partials/alert_table.html" %}
+{% if prev_url or next_url %}
+  <nav class="pager" aria-label="Pagination">
+    {% if prev_url %}<a class="button" href="{{ prev_url }}">Previous</a>{% endif %}
+    {% if next_url %}<a class="button" href="{{ next_url }}">Next</a>{% endif %}
+  </nav>
+{% endif %}

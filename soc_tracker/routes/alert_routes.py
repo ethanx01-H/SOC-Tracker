@@ -34,7 +34,7 @@ from ..services import merge_service, notify, sla_service
 from ..services.chart_service import chart_counts
 from ..services.evidence_service import EvidenceError, read_upload, store_evidence
 from ..config import PUBLIC_BASE_URL
-from ..utils import audit, redirect_to, render
+from ..utils import audit, is_partial_request, page_url, redirect_to, render
 
 logger = logging.getLogger("soc_tracker.alert_routes")
 
@@ -59,26 +59,33 @@ def dashboard(request: Request, db: Session = Depends(get_db), user: User = Depe
         "critical": len([a for a in alerts if a.severity == "Critical"]),
         "overdue": len([a for a in alerts if sla_status(a)["class"] == "sla-overdue"]),
     }
-    return render(request, "alerts/dashboard.html", {
+    context = {
         "alerts": alerts[:80],
+        "total": len(alerts),
         "counts": counts,
         "charts": chart_counts(alerts),
         "ranges": RANGE_CHOICES,
         "active_range": (request.query_params.get("range") or "all").lower(),
-        "sla_summary": sla_service.summary(db),
-        "breaches": sla_service.recent(db, 8),
-    }, db, user)
+    }
+    if is_partial_request(request):
+        return render(request, "alerts/partials/dashboard_results.html", context, db, user)
+    return render(request, "alerts/dashboard.html", context, db, user)
 
 
 @router.get("/alerts/", response_class=HTMLResponse)
 def alert_list(request: Request, db: Session = Depends(get_db), user: User = Depends(require_user), page: int = 1):
     pagination = filtered_alerts_paginated(db, request, page=page)
-    return render(request, "alerts/list.html", {
+    context = {
         "alerts": pagination["alerts"],
         "page": pagination["page"],
         "total_pages": pagination["total_pages"],
         "total": pagination["total"],
-    }, db, user)
+        "prev_url": page_url(request, pagination["page"] - 1) if pagination["page"] > 1 else None,
+        "next_url": page_url(request, pagination["page"] + 1) if pagination["page"] < pagination["total_pages"] else None,
+    }
+    if is_partial_request(request):
+        return render(request, "alerts/partials/alert_results.html", context, db, user)
+    return render(request, "alerts/list.html", context, db, user)
 
 
 @router.get("/alerts/mine/", response_class=HTMLResponse)

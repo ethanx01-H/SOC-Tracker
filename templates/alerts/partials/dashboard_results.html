@@ -1,0 +1,45 @@
+<section class="metric-grid">
+  <div class="metric"><strong>{{ counts.total }}</strong><span>Total alerts</span></div>
+  <div class="metric"><strong>{{ counts.open }}</strong><span>Open</span></div>
+  <div class="metric"><strong>{{ counts.pending }}</strong><span>Pending</span></div>
+  <div class="metric"><strong>{{ counts.wip }}</strong><span>WIP</span></div>
+  <div class="metric"><strong>{{ counts.critical }}</strong><span>Critical</span></div>
+  <div class="metric"><strong>{{ counts.overdue }}</strong><span>Overdue SLA</span></div>
+</section>
+<section class="chart-grid">
+  {% for title, chart in [
+    ("Source", charts.source),
+    ("Analyst", charts.analyst),
+    ("Tactic", charts.tactic)
+  ] %}
+    <div class="panel pie-panel">
+      <h2>{{ title }}</h2>
+      {% if chart.total %}
+        <svg class="pie-chart" viewBox="0 0 100 100" role="img" aria-label="{{ title }} alert distribution">
+          {% for slice in chart.slices %}
+            <a href="{{ slice.href }}" aria-label="{{ slice.label }}: {{ slice.count }} alerts">
+              <path d="{{ slice.path }}" fill="{{ slice.color }}">
+                <title>{{ slice.label }}: {{ slice.count }} alerts</title>
+              </path>
+            </a>
+          {% endfor %}
+        </svg>
+        <div class="pie-legend">
+          {% for slice in chart.slices %}
+            <a href="{{ slice.href }}">
+              <i style="background: {{ slice.color }}"></i>
+              <span>{{ slice.label }}</span>
+              <strong>{{ slice.count }}</strong>
+            </a>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty">No data</div>
+      {% endif %}
+    </div>
+  {% endfor %}
+</section>
+<section class="panel">
+  <h2>Recent alerts</h2>
+  {% include "alerts/partials/alert_results.html" %}
+</section>

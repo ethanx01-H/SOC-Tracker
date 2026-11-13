@@ -1,12 +1,15 @@
-<form method="get" class="filters">
-  <input name="q" value="{{ request.query_params.get('q', '') }}" placeholder="Search alert, asset, IOC, analyst">
-  <select name="severity">
+<form method="get" class="filters" data-filter-form>
+  {% if active_range and active_range != 'all' %}
+    <input type="hidden" name="range" value="{{ active_range }}">
+  {% endif %}
+  <input name="q" value="{{ request.query_params.get('q', '') }}" placeholder="Search alert, asset, IOC, analyst" autocomplete="off" spellcheck="false" aria-label="Search alerts">
+  <select name="severity" aria-label="Severity">
     <option value="">All severities</option>
     {% for severity in severities %}
       <option value="{{ severity }}" {% if request.query_params.get('severity') == severity %}selected{% endif %}>{{ severity_labels[severity] }}</option>
     {% endfor %}
   </select>
-  <select name="status">
+  <select name="status" aria-label="Status">
     <option value="">All statuses</option>
     {% for status in statuses %}
       <option value="{{ status }}" {% if request.query_params.get('status') == status %}selected{% endif %}>{{ status }}</option>

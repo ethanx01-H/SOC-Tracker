@@ -145,19 +145,24 @@ def filtered_alerts(db: Session, request) -> list[Alert]:
         query = query.where(Alert.created_at >= cutoff)
 
     if search:
-        like = f"%{search}%"
-        evidence_alert_ids = select(Evidence.alert_id).where(Evidence.original_name.ilike(like))
-        query = query.where(or_(
-            Alert.alert_id.ilike(like),
-            Alert.title.ilike(like),
-            Alert.description.ilike(like),
-            Alert.asset.ilike(like),
-            Alert.source.ilike(like),
-            Alert.analyst.ilike(like),
-            Alert.iocs_json.ilike(like),
-            Alert.events.any(AlertEvent.message.ilike(like)),
-            Alert.id.in_(evidence_alert_ids),
-        ))
+        if search.lstrip("#").isdigit():
+            # A ticket number is a lookup, not a text search: matching bare digits
+            # against descriptions and IOCs made "9" return six unrelated tickets.
+            query = query.where(Alert.alert_id == f"#{search.lstrip('#')}")
+        else:
+            like = f"%{search}%"
+            evidence_alert_ids = select(Evidence.alert_id).where(Evidence.original_name.ilike(like))
+            query = query.where(or_(
+                Alert.alert_id.ilike(like),
+                Alert.title.ilike(like),
+                Alert.description.ilike(like),
+                Alert.asset.ilike(like),
+                Alert.source.ilike(like),
+                Alert.analyst.ilike(like),
+                Alert.iocs_json.ilike(like),
+                Alert.assigned_to.has(User.username.ilike(like)),
+                Alert.id.in_(evidence_alert_ids),
+            ))
     if severity:
         query = query.where(Alert.severity == severity)
     if alert_status:

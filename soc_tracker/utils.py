@@ -4,6 +4,7 @@ import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
 from fastapi import Request, Response
@@ -113,6 +114,23 @@ def render(request: Request, template: str, context: dict, db: Session, user: Us
     response.delete_cookie("flash")
     set_security_cookies(response, request, base["csrf_token"])
     return response
+
+
+def is_partial_request(request: Request) -> bool:
+    """True when the browser asked for the results fragment instead of a page.
+
+    Filtering used to submit a GET form, which reloaded the whole page and
+    scrolled back to the top. The list and dashboard now answer the same URL with
+    just the results markup when this header is present.
+    """
+    return request.headers.get("x-partial") == "1"
+
+
+def page_url(request: Request, page: int) -> str:
+    """Current URL with the page number replaced, other filters preserved."""
+    params = [(key, value) for key, value in request.query_params.multi_items() if key != "page"]
+    params.append(("page", str(page)))
+    return f"{request.url.path}?{urlencode(params)}"
 
 
 def redirect_to(path: str, message: str | None = None) -> RedirectResponse:

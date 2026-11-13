@@ -228,7 +228,8 @@ p {
 }
 
 .filters input {
-  min-width: min(360px, 100%);
+  flex: 1 1 320px;
+  min-width: min(320px, 100%);
 }
 
 .table {
@@ -308,16 +309,16 @@ p {
 
 .chart-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 16px;
 }
 
 .pie-panel {
   display: grid;
-  grid-template-columns: 112px minmax(0, 1fr);
-  gap: 12px;
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  gap: 10px;
 }
 
 .pie-panel h2 {
@@ -369,11 +370,17 @@ p {
   text-decoration: underline;
 }
 
-/* Long tactic names ("Reconnaissance") have no break opportunity and used to
-   spill over the chart next to them. */
+/* Long tactic names ("Reconnaissance") have no break opportunity. Give the
+   label the card's full width and clip it rather than breaking mid-word. */
 .pie-legend span {
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pie-legend {
+  width: 100%;
 }
 
 .user-row {
@@ -751,4 +758,51 @@ body.lightbox-open {
 
 .banner a {
   font-weight: 700;
+}
+
+.results-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 12px 0 8px;
+  font-size: 0.86rem;
+}
+
+.results-bar .button {
+  padding: 4px 10px;
+  font-size: 0.8rem;
+}
+
+.pager {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* The results swap in place; dim them instead of flashing a spinner. */
+#alert-results.is-loading {
+  opacity: 0.55;
+  transition: opacity 120ms ease;
+}
+
+/* Equal-width tiles: the flex row sized each card to its label, so "Overdue SLA"
+   was narrower than "Total alerts" and the row looked ragged. */
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+
+@media (max-width: 1100px) {
+  .metric-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }

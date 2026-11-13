@@ -80,15 +80,44 @@ def test_dashboard_range_hides_older_tickets(client, sessions):
     assert token
 
 
-def test_dashboard_shows_sla_breach_panel(client, sessions):
+def test_dashboard_partial_request_returns_only_the_results(client, sessions):
     db = sessions()
     user = db.scalar(select(User).where(User.username == "l2"))
-    seed_alert(db, user, "Breached ticket", hours_old=20)
+    seed_alert(db, user, "Partial ticket")
     db.close()
 
     sign_in(client)
-    page = client.get("/")
-    assert "SLA breaches" in page.text
+    page = client.get("/alerts/?q=Partial", headers={"X-Partial": "1"})
+    assert page.status_code == 200
+    assert "Partial ticket" in page.text
+    assert "<html" not in page.text
+    assert "results-bar" in page.text
+
+
+def test_search_by_ticket_number_is_exact(client, sessions):
+    db = sessions()
+    user = db.scalar(select(User).where(User.username == "l2"))
+    wanted = seed_alert(db, user, "Wanted ticket")
+    seed_alert(db, user, "Noise ticket", hours_old=1)
+    number = wanted.alert_id.lstrip("#")
+    db.close()
+
+    sign_in(client)
+    page = client.get(f"/alerts/?q={number}")
+    assert "Wanted ticket" in page.text
+    assert "Noise ticket" not in page.text
+
+
+def test_search_by_analyst_ignores_timeline_text(client, sessions):
+    """Searching a username must not match every ticket that user ever touched."""
+    db = sessions()
+    user = db.scalar(select(User).where(User.username == "l2"))
+    seed_alert(db, user, "Unassigned ticket")
+    db.close()
+
+    sign_in(client)
+    page = client.get("/alerts/?q=l2")
+    assert "Unassigned ticket" not in page.text
 
 
 def test_bulk_assign_to_me(client, sessions):

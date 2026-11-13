@@ -12,6 +12,9 @@
 </header>
 <section class="panel">
   {% include "alerts/partials/filter_form.html" %}
-  {% include "alerts/partials/alert_table.html" %}
+  <div id="alert-results" data-results>
+    {% include "alerts/partials/alert_results.html" %}
+  </div>
 </section>
 {% endblock %}
+{% block scripts %}<script src="{{ url_for('static', path='alerts/filter.js') }}" defer></script>{% endblock %}
