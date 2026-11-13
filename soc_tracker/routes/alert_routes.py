@@ -144,7 +144,7 @@ async def alert_detail(request: Request, pk: int, db: Session = Depends(get_db),
         raise HTTPException(status_code=404)
     roles = assignable_roles_for(user)
     assignable_users = list(db.scalars(select(User).where(User.role.in_(roles)).order_by(User.username))) if roles else []
-    evidence = list(db.scalars(select(Evidence).where(Evidence.alert_id == alert.id).order_by(Evidence.created_at.desc())))
+    evidence = list(db.scalars(select(Evidence).where(Evidence.alert_id == alert.id).order_by(Evidence.created_at.desc(), Evidence.id.desc())))
     return render(request, "alerts/detail.html", {
         "alert": alert,
         "can_edit": can_edit_alert(user, alert),

@@ -82,23 +82,13 @@
       <h2>Close alert</h2>
       <form method="post" action="/alerts/{{ alert.pk }}/close/" class="form-grid">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <textarea name="resolution_summary" rows="4" placeholder="Summarize disposition, root cause, impacted assets, and final action" required></textarea>
+        <textarea name="resolution_summary" rows="3" class="compact-textarea" placeholder="Summarize disposition, root cause, impacted assets, and final action" required></textarea>
         <div class="form-actions">
           <button class="primary" type="submit">Close with summary</button>
         </div>
       </form>
     </section>
   {% endif %}
-  <section class="assign-panel">
-    <h2>Investigation note</h2>
-    <form method="post" action="/alerts/{{ alert.pk }}/notes/" class="form-grid">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <textarea name="note" rows="4" placeholder="Add triage steps, containment actions, evidence, or handoff context" required></textarea>
-      <div class="form-actions">
-        <button class="primary" type="submit">Add note</button>
-      </div>
-    </form>
-  </section>
   <section class="assign-panel">
     <h2>Evidence</h2>
     {% if evidence %}
@@ -149,6 +139,16 @@
     {% else %}
       <div class="empty">No evidence attached</div>
     {% endif %}
+  </section>
+  <section class="assign-panel">
+    <h2>Investigation note</h2>
+    <form method="post" action="/alerts/{{ alert.pk }}/notes/" class="form-grid">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <textarea name="note" rows="4" placeholder="Add triage steps, containment actions, evidence, or handoff context" required></textarea>
+      <div class="form-actions">
+        <button class="primary" type="submit">Add note</button>
+      </div>
+    </form>
   </section>
   <section>
     <h2>Activity log <span class="muted">· {{ display_timezone }}</span></h2>

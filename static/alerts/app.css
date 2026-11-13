@@ -479,6 +479,10 @@ p {
   width: 100%;
 }
 
+.compact-textarea {
+  min-height: 84px;
+}
+
 .checkbox-field {
   display: flex;
   align-items: center;
