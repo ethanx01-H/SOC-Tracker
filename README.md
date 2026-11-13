@@ -178,7 +178,8 @@ Create users, manage roles (L1/L2/L3), and reset passwords.
 - L1, L2, and L3 users can assign unassigned Open tickets to themselves
 - Optional IOCs when creating tickets; close summaries have no application-level word-count limit
 - Filter by severity, status, search terms; CSV export of filtered results
-- Evidence file uploads with SHA-256 integrity tracking — attach files while creating the ticket, or add more later from the alert page
+- Evidence is attached when the ticket is created; there is no later upload, so a ticket's evidence is exactly what the analyst filed with it
+- Every file is stored with its SHA-256 recorded; PNG and JPEG open in an in-page preview popup, everything else downloads
 - Evidence uploads accept `.xlsx`, `.csv`, `.jpg`, `.jpeg`, `.png`, `.txt`, `.log`, `.json`, `.pdf`, `.pcap`, `.pcapng`, up to 20 MB each (25 MB per submission); a rejected file cancels the whole create, so no half-made ticket is left behind
 - Investigation notes and activity-log timeline per alert
 
@@ -312,7 +313,7 @@ Test coverage includes:
 - ~~Automated tests for alert workflows, role permissions, imports, and webhooks~~ ✅ Done
 - Dashboard date-range filters and trend charts for weekly/monthly reporting
 - Richer SLA tracking with due dates, owner notifications, and breach history
-- Evidence management improvements (file previews, tagging, retention)
+- Evidence management improvements (tagging, retention)
 - External integrations for SIEM enrichment, ticket export, and notifications
 - Deployment docs for HTTPS, reverse proxy, and backups
 - API documentation page with example payloads for n8n and Elastic imports

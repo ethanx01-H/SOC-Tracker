@@ -144,18 +144,17 @@ class TestA01BrokenAccessControl:
         assert l2_session.get("/admin/users/").status_code == 403
 
     def test_path_traversal_in_upload(self, l1_session, db):
-        alert = create_test_alert(db)
         csrf = get_csrf(l1_session)
         response = l1_session.post(
-            f"/alerts/{alert.id}/evidence/",
-            files={"evidence_file": ("../../../etc/passwd.txt", b"test", "text/plain")},
-            data={"csrf_token": csrf},
+            "/alerts/new/",
+            data={"csrf_token": csrf, "title": "Traversal attempt"},
+            files={"evidence_files": ("../../../etc/passwd.txt", b"test", "text/plain")},
         )
-        if response.status_code == 303:
-            evidence = db.scalar(select(Evidence).where(Evidence.alert_id == alert.id))
-            if evidence:
-                assert ".." not in evidence.stored_name
-                assert "/" not in evidence.stored_name
+        assert response.status_code == 303
+        evidence = db.scalar(select(Evidence).order_by(Evidence.id.desc()))
+        assert evidence is not None
+        assert ".." not in evidence.stored_name
+        assert "/" not in evidence.stored_name
 
 
 # ============================================================================
@@ -360,27 +359,28 @@ class TestA07AuthenticationFailures:
 class TestA08DataIntegrityFailures:
 
     def test_evidence_sha256_tracking(self, l1_session, db):
-        alert = create_test_alert(db)
         content = b"test evidence content"
         csrf = get_csrf(l1_session)
-        l1_session.post(
-            f"/alerts/{alert.id}/evidence/",
-            files={"evidence_file": ("test.txt", content, "text/plain")},
-            data={"csrf_token": csrf},
+        response = l1_session.post(
+            "/alerts/new/",
+            data={"csrf_token": csrf, "title": "Evidence integrity"},
+            files={"evidence_files": ("test.txt", content, "text/plain")},
         )
-        evidence = db.scalar(select(Evidence).where(Evidence.alert_id == alert.id))
-        if evidence:
-            assert evidence.sha256 == hashlib.sha256(content).hexdigest()
+        assert response.status_code == 303
+        evidence = db.scalar(select(Evidence).order_by(Evidence.id.desc()))
+        assert evidence is not None
+        assert evidence.sha256 == hashlib.sha256(content).hexdigest()
 
     def test_file_type_validation(self, l1_session, db):
-        alert = create_test_alert(db)
         csrf = get_csrf(l1_session)
         response = l1_session.post(
-            f"/alerts/{alert.id}/evidence/",
-            files={"evidence_file": ("malicious.exe", b"MZ...", "application/octet-stream")},
-            data={"csrf_token": csrf},
+            "/alerts/new/",
+            data={"csrf_token": csrf, "title": "Blocked type"},
+            files={"evidence_files": ("malicious.exe", b"MZ...", "application/octet-stream")},
         )
-        assert "not allowed" in response.text or response.status_code == 303
+        assert response.status_code == 200
+        assert "not allowed" in response.text
+        assert db.scalar(select(Evidence).order_by(Evidence.id.desc())) is None
 
     def test_session_tampering_rejected(self, client):
         login_with_csrf(client, "l1", "Password123!")

@@ -2,6 +2,7 @@
 
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, create_engine, event, text
@@ -128,6 +129,13 @@ class Evidence(Base):
     # Declared as a unique index (not a column-level UNIQUE) so the model matches
     # what migration 0002 created; otherwise alembic autogenerate reports drift.
     __table_args__ = (Index("ix_fastapi_evidence_stored_name", "stored_name", unique=True),)
+
+    IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg"}
+
+    @property
+    def is_image(self) -> bool:
+        """True for formats the browser can preview in a popup."""
+        return Path(self.stored_name).suffix.lower() in self.IMAGE_EXTENSIONS
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     alert_id: Mapped[int] = mapped_column(ForeignKey("fastapi_alerts.id"), index=True)

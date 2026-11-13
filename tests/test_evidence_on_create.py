@@ -137,3 +137,72 @@ def test_create_without_files_still_works(sessions):
         assert db.query(Evidence).count() == 0
     finally:
         db.close()
+
+
+def test_upload_route_no_longer_exists(sessions):
+    client = make_client()
+    csrf = sign_in(client)
+    create_alert(client, csrf)
+
+    db = sessions()
+    try:
+        alert_id = db.query(Alert).one().id
+    finally:
+        db.close()
+
+    response = client.post(
+        f"/alerts/{alert_id}/evidence/",
+        data={"csrf_token": csrf},
+        files={"evidence_file": ("late.txt", b"added after creation", "text/plain")},
+    )
+    assert response.status_code in (404, 405)
+
+    db = sessions()
+    try:
+        assert db.query(Evidence).count() == 0
+    finally:
+        db.close()
+
+
+def test_images_preview_inline_and_other_types_do_not(sessions):
+    client = make_client()
+    csrf = sign_in(client)
+    create_alert(client, csrf, files=[
+        ("evidence_files", ("shot.png", b"\x89PNG\r\n\x1a\nbody", "image/png")),
+        ("evidence_files", ("notes.txt", b"plain text", "text/plain")),
+    ])
+
+    db = sessions()
+    try:
+        image = db.query(Evidence).filter_by(original_name="shot.png").one()
+        other = db.query(Evidence).filter_by(original_name="notes.txt").one()
+    finally:
+        db.close()
+
+    preview = client.get(f"/evidence/{image.id}/preview/")
+    assert preview.status_code == 200
+    assert preview.headers["content-type"] == "image/png"
+    assert preview.headers["content-disposition"].startswith("inline")
+
+    # A non-image is not previewable, and the download route still attaches it.
+    assert client.get(f"/evidence/{other.id}/preview/").status_code == 404
+    assert client.get(f"/evidence/{other.id}/").headers["content-disposition"].startswith("attachment")
+
+
+def test_detail_page_shows_thumbnail_and_no_upload_box(sessions):
+    client = make_client()
+    csrf = sign_in(client)
+    create_alert(client, csrf, files=[("evidence_files", ("shot.png", b"\x89PNG\r\n\x1a\nbody", "image/png"))])
+
+    db = sessions()
+    try:
+        image = db.query(Evidence).one()
+        alert_id = image.alert_id
+    finally:
+        db.close()
+
+    page = client.get(f"/alerts/{alert_id}/").text
+    assert 'name="evidence_file"' not in page, "the upload box must be gone"
+    assert f'src="/evidence/{image.id}/preview/"' in page
+    assert f'id="preview-{image.id}"' in page
+    assert "lightbox" in page

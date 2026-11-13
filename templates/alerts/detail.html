@@ -101,24 +101,48 @@
   </section>
   <section class="assign-panel">
     <h2>Evidence</h2>
-    <form method="post" action="/alerts/{{ alert.pk }}/evidence/" enctype="multipart/form-data" class="inline-form">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <input name="evidence_file" type="file" accept=".xlsx,.csv,.jpg,.jpeg,.png,.txt,.log,.json,.pdf,.pcap,.pcapng" required>
-      <button class="primary" type="submit">Upload</button>
-    </form>
-    <div class="timeline">
-      {% for item in evidence %}
-        <article class="timeline-item">
-          <div>
-            <strong><a href="/evidence/{{ item.id }}/">{{ item.original_name }}</a></strong>
-            <span class="muted">{{ item.size_bytes }} bytes</span>
-          </div>
-          <p class="muted">SHA-256 {{ item.sha256 }}</p>
-        </article>
-      {% else %}
-        <div class="empty">No evidence uploaded</div>
-      {% endfor %}
-    </div>
+    {% if evidence %}
+      <div class="evidence-grid">
+        {% for item in evidence %}
+          {% if item.is_image %}
+            <figure class="evidence-card">
+              <a class="evidence-open" href="#preview-{{ item.id }}" title="Open {{ item.original_name }}">
+                <img src="/evidence/{{ item.id }}/preview/" alt="{{ item.original_name }}" loading="lazy">
+              </a>
+              <figcaption>
+                <strong>{{ item.original_name }}</strong>
+                <span class="muted">{{ item.size_bytes }} bytes</span>
+                <a href="/evidence/{{ item.id }}/">Download</a>
+              </figcaption>
+            </figure>
+            <div id="preview-{{ item.id }}" class="lightbox">
+              <a class="lightbox-backdrop" href="#" aria-label="Close preview"></a>
+              <figure>
+                <img src="/evidence/{{ item.id }}/preview/" alt="{{ item.original_name }}">
+                <figcaption>
+                  <strong>{{ item.original_name }}</strong>
+                  <span class="muted">SHA-256 {{ item.sha256 }}</span>
+                  <span class="lightbox-actions">
+                    <a href="/evidence/{{ item.id }}/">Download</a>
+                    <a href="#">Close</a>
+                  </span>
+                </figcaption>
+              </figure>
+            </div>
+          {% else %}
+            <article class="evidence-card evidence-file">
+              <div>
+                <strong><a href="/evidence/{{ item.id }}/">{{ item.original_name }}</a></strong>
+                <span class="muted">{{ item.size_bytes }} bytes</span>
+              </div>
+              <p class="muted">SHA-256 {{ item.sha256 }}</p>
+            </article>
+          {% endif %}
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty">No evidence attached</div>
+    {% endif %}
   </section>
   <section>
     <h2>Activity log <span class="muted">· {{ display_timezone }}</span></h2>
