@@ -7,6 +7,11 @@ services:
       APP_ENV: ${APP_ENV:-review}
       SQLITE_PATH: /app/data/fastapi.sqlite3
       COOKIE_SECURE: ${COOKIE_SECURE:-0}
+      # The host proxy reaches the container over the Docker bridge, so the
+      # container sees it as a private 172.x address. If your Docker network uses
+      # a different range, set TRUSTED_PROXIES explicitly — do not add ranges
+      # that can reach port 8080 directly, or clients can spoof their address.
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-172.16.0.0/12}
     ports:
       - "127.0.0.1:8080:8080"
     volumes:

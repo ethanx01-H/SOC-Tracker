@@ -75,7 +75,7 @@ This compose setup binds to localhost for review and defaults to non-secure cook
 
 The local/demo app stores alert, account, event, and audit records in `data/fastapi.sqlite3` and evidence files in `data/evidence/`. In Docker, both are under `/app/data` in the `soc_tracker_data` volume. Alert deletion is disabled, and the app does not automatically expire records or evidence; this is persistence, not a guaranteed retention policy. Removing the Docker volume or losing the host can still destroy the data.
 
-The current SQLite setup is for a single-instance pilot and does not provide a production two-year retention guarantee. Before production, use a managed database with durable backups and a tested restore process, and durable evidence storage with a lifecycle/retention policy that keeps incident records and evidence for at least 730 days. Protect audit exports separately (ideally immutable storage), monitor backup/retention jobs, and verify restores. Keep database, evidence, and audit retention aligned; do not enable automatic deletion before the required retention period. Request limiting and login lockout are in process memory; keep one worker and use proxy-level limits unless a shared limiter is configured.
+The current SQLite setup is for a single-instance pilot and does not provide a production two-year retention guarantee. Before production, use a managed database with durable backups and a tested restore process, and durable evidence storage with a lifecycle/retention policy that keeps incident records and evidence for at least 730 days. Protect audit exports separately (ideally immutable storage), monitor backup/retention jobs, and verify restores. Keep database, evidence, and audit retention aligned; do not enable automatic deletion before the required retention period. Request limiting and login lockout are in process memory; keep one worker and use proxy-level limits unless a shared limiter is configured. Set `TRUSTED_PROXIES` to the addresses of your reverse proxy so lockouts, rate limits, and audit rows key on the real client address rather than the proxy.
 
 ## Screenshots
 
@@ -160,6 +160,11 @@ curl -X POST http://localhost:8080/api/webhook/n8n/logs/ \
   -d '{"alert_id":"#1","message":"GeoIP lookup completed.","workflow":"SOC enrichment"}'
 ```
 
+Deliveries are idempotent: when a payload carries an Elastic `_id` (or an
+`external_id`), a retry returns the ticket that already exists instead of
+creating a second one. The response lists `created`, `existing`, and the combined
+`ids`, so a workflow can tell a first delivery from a replay.
+
 ## Configuration
 
 All settings are controlled via environment variables. See `.env.example` for the full list.
@@ -172,8 +177,19 @@ All settings are controlled via environment variables. See `.env.example` for th
 | `COOKIE_SECURE`          | No       | `0`                    | Set to `1` for HTTPS-only cookies        |
 | `RATE_LIMIT_REQUESTS`    | No       | `120`                  | Max requests per window                  |
 | `RATE_LIMIT_WINDOW`      | No       | `60`                   | Rate limit window in seconds             |
-| `LOGIN_LOCKOUT_THRESHOLD`| No       | `5`                    | Failed login attempts before lockout     |
+| `LOGIN_LOCKOUT_THRESHOLD`| No       | `5`                    | Failed attempts per address+username     |
+| `LOGIN_ACCOUNT_LOCKOUT_THRESHOLD` | No | `10`                 | Failed attempts per account, any address |
 | `LOGIN_LOCKOUT_SECONDS`  | No       | `300`                  | Lockout duration in seconds              |
+| `TRUSTED_PROXIES`        | No       | `127.0.0.1/32,::1/128` | Peers allowed to set `X-Forwarded-For`   |
+
+`TRUSTED_PROXIES` matters behind nginx or a Docker port mapping: the app resolves
+the client address from `X-Forwarded-For` only when the direct peer is in this
+list, and uses that address for rate limiting, login lockout, and every audit
+row. Leave it at loopback for a direct deployment. `docker-compose.yml` widens it
+to the Docker bridge range so the host proxy is trusted; never widen it to a
+range that can reach the app port directly, or clients can choose their own
+identity. `/healthz` and `/static/` are exempt from the request limiter so the
+container healthcheck cannot throttle itself.
 
 Production startup fails unless both secrets are explicitly supplied and at least 32 characters long. Keep them stable and private.
 
