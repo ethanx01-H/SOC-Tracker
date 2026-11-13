@@ -488,17 +488,32 @@ p {
 }
 
 .checkbox-field input[type="checkbox"] {
-  appearance: auto;
-  width: 16px;
-  height: 16px;
+  appearance: none;
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
   min-height: 0;
   margin: 0;
   padding: 0;
-  border: 0;
-  background: none;
+  border: 1.5px solid var(--line);
   border-radius: 3px;
-  accent-color: var(--primary);
+  background-color: var(--field);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 9px 9px;
+  cursor: pointer;
   flex: 0 0 auto;
+}
+
+.checkbox-field input[type="checkbox"]:checked {
+  background-color: var(--primary);
+  border-color: var(--primary);
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23fff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 8.5l3.5 3.5L13 5'/%3E%3C/svg%3E");
+}
+
+.checkbox-field input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 .single {
