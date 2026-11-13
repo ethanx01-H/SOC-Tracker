@@ -27,6 +27,17 @@ def records_from(value):
     return [value]
 
 
+def external_identifier(record):
+    """Stable identifier used to deduplicate replayed webhook payloads."""
+    if not isinstance(record, dict):
+        return None
+    doc_id = str(record.get("_id") or record.get("external_id") or "").strip()
+    if not doc_id:
+        return None
+    index = str(record.get("_index") or "").strip()
+    return (f"{index}:{doc_id}" if index else doc_id)[:160]
+
+
 def record_to_alert(record):
     severity = normalize_severity(first_value(record, [
         "severity",
@@ -37,6 +48,7 @@ def record_to_alert(record):
         "log.level",
     ]))
     return {
+        "external_id": external_identifier(record),
         "title": first_value(record, [
             "title",
             "summary",

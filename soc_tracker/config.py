@@ -47,7 +47,7 @@ SEVERITY_LABELS = {
     "Informational": "4 - Informational",
 }
 ROLES = ["L1", "L2", "L3"]
-ALEMBIC_HEAD = "0005_informational_severity"
+ALEMBIC_HEAD = "0006_alert_external_id"
 
 LOGIN_LOCKOUT_THRESHOLD = int(os.environ.get("LOGIN_LOCKOUT_THRESHOLD", "5"))
 LOGIN_ACCOUNT_LOCKOUT_THRESHOLD = int(os.environ.get("LOGIN_ACCOUNT_LOCKOUT_THRESHOLD", "10"))

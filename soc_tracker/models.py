@@ -52,6 +52,7 @@ class Alert(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     alert_id: Mapped[str] = mapped_column(String(16), unique=True, index=True)
+    external_id: Mapped[Optional[str]] = mapped_column(String(160), unique=True, index=True, nullable=True)
     title: Mapped[str] = mapped_column(String(180))
     description: Mapped[str] = mapped_column(Text, default="")
     source: Mapped[str] = mapped_column(String(80), default="Manual")

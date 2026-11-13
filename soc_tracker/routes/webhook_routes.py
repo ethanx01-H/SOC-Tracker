@@ -16,7 +16,8 @@ from ..auth import can_create_alert, require_user, UserDep
 from ..config import N8N_API_HEADER, N8N_API_KEY
 from ..dependencies import get_db
 from ..models import Alert, AlertEvent, AuditLog
-from ..services.alert_service import create_alert
+from ..net import client_ip
+from ..services.alert_service import create_or_get_alert
 from ..utils import audit, redirect_to, render
 
 logger = logging.getLogger("soc_tracker.webhook_routes")
@@ -45,18 +46,28 @@ async def elastic_import(request: Request, raw_json: Annotated[str, Form()], use
         parsed = parse_elastic_alerts(raw_json)
     except json.JSONDecodeError as error:
         return render(request, "alerts/elastic_import.html", {"raw_json": raw_json, "error": f"Invalid JSON: {error}"}, db, user)
-    created = [create_alert(db, dict(item), user) for item in parsed]
-    audit(db, user, "alert.elastic_import", f"Imported {len(created)} alert(s) from Elastic.", "alert_batch", len(created), request)
+    created = []
+    skipped = 0
+    for item in parsed:
+        alert, is_new = create_or_get_alert(db, dict(item), user)
+        if is_new:
+            created.append(alert)
+        else:
+            skipped += 1
+    message = f"Imported {len(created)} alert(s) from Elastic."
+    if skipped:
+        message += f" Skipped {skipped} duplicate(s)."
+    audit(db, user, "alert.elastic_import", message, "alert_batch", str(len(created)), request)
     db.commit()
-    logger.info("Imported %d Elastic alerts by %s", len(created), user.username)
-    return redirect_to("/alerts/", f"Imported {len(created)} Elastic alert(s).")
+    logger.info("Imported %d Elastic alerts by %s (%d duplicates skipped)", len(created), user.username, skipped)
+    return redirect_to("/alerts/", message)
 
 
 @router.post("/api/webhook/n8n")
 @router.post("/api/webhook/n8n/")
 async def n8n_webhook(request: Request, db: Session = Depends(get_db)):
     if not api_key_valid(request):
-        logger.warning("Invalid API key attempt from %s", request.client.host if request.client else "unknown")
+        logger.warning("Invalid API key attempt from %s", client_ip(request))
         return JSONResponse({"ok": False, "error": "invalid api key"}, status_code=401)
     try:
         payload = await request.json()
@@ -68,21 +79,33 @@ async def n8n_webhook(request: Request, db: Session = Depends(get_db)):
     if len(records) > 100:
         return JSONResponse({"ok": False, "error": "maximum 100 alerts per request"}, status_code=413)
     created = []
+    existing = []
     try:
         for record in records:
-            alert = create_alert(db, record_to_alert(record))
-            event = alert.events[0]
-            event.source = "n8n"
-            event.payload_json = json.dumps(record)[:100000]
-            db.commit()
-            created.append(alert)
+            alert, is_new = create_or_get_alert(db, record_to_alert(record))
+            if is_new:
+                event = alert.events[0]
+                event.source = "n8n"
+                event.payload_json = json.dumps(record)[:100000]
+                db.commit()
+                created.append(alert)
+            else:
+                existing.append(alert)
     except (ValueError, TypeError) as error:
         db.rollback()
         return JSONResponse({"ok": False, "error": str(error)}, status_code=422)
-    db.add(AuditLog(action="webhook.alerts_created", target_type="alert_batch", target_id=str(len(created)), message=f"n8n created {len(created)} alert(s).", source_ip=request.client.host if request.client else ""))
+    message = f"n8n created {len(created)} alert(s)."
+    if existing:
+        message += f" {len(existing)} duplicate(s) matched existing tickets."
+    db.add(AuditLog(action="webhook.alerts_created", target_type="alert_batch", target_id=str(len(created)), message=message, source_ip=client_ip(request)))
     db.commit()
-    logger.info("n8n webhook created %d alerts", len(created))
-    return {"ok": True, "created": [alert.alert_id for alert in created]}
+    logger.info("n8n webhook created %d alerts, matched %d duplicates", len(created), len(existing))
+    return {
+        "ok": True,
+        "created": [alert.alert_id for alert in created],
+        "existing": [alert.alert_id for alert in existing],
+        "ids": [alert.alert_id for alert in created + existing],
+    }
 
 
 @router.post("/api/webhook/n8n/logs")
@@ -105,7 +128,7 @@ async def n8n_log_webhook(request: Request, db: Session = Depends(get_db)):
     message = str(message)[:10000]
     event = AlertEvent(alert=alert, event_type="n8n_log", message=message, source="n8n", payload_json=json.dumps(payload))
     db.add(event)
-    db.add(AuditLog(action="webhook.log_added", target_type="alert", target_id=alert.alert_id, message=f"n8n added a workflow log to {alert.alert_id}.", source_ip=request.client.host if request.client else ""))
+    db.add(AuditLog(action="webhook.log_added", target_type="alert", target_id=alert.alert_id, message=f"n8n added a workflow log to {alert.alert_id}.", source_ip=client_ip(request)))
     db.commit()
     db.refresh(event)
     logger.info("n8n log added to %s", alert.alert_id)

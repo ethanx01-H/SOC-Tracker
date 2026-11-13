@@ -11,6 +11,7 @@ from pathlib import Path
 from urllib.parse import urlencode
 
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..config import SEVERITIES, STATUSES, UPLOAD_DIR
@@ -57,6 +58,32 @@ def create_alert(db: Session, values: dict, user: User | None = None) -> Alert:
     db.refresh(alert)
     logger.info("Alert %s created by %s", alert.alert_id, actor.username if actor else "system")
     return alert
+
+
+def create_or_get_alert(db: Session, values: dict, user: User | None = None) -> tuple[Alert, bool]:
+    """Create an alert, or return the existing one for a repeated external id.
+
+    n8n and Elastic retry on timeout, so without this a flaky webhook turns a
+    single detection into several tickets. Returns (alert, created).
+    """
+    external_id = values.get("external_id")
+    if external_id:
+        existing = db.scalar(select(Alert).where(Alert.external_id == external_id))
+        if existing:
+            logger.info("Duplicate external id %s maps to existing %s", external_id, existing.alert_id)
+            return existing, False
+    try:
+        return create_alert(db, dict(values), user), True
+    except IntegrityError:
+        # Another worker won the race between the lookup and the insert.
+        db.rollback()
+        if not external_id:
+            raise
+        existing = db.scalar(select(Alert).where(Alert.external_id == external_id))
+        if existing:
+            logger.info("Duplicate external id %s mapped to existing %s after race", external_id, existing.alert_id)
+            return existing, False
+        raise
 
 
 def normalized_datetime(value: datetime) -> datetime:
