@@ -84,13 +84,32 @@ evidence. Those commands only remove Docker-managed volumes, and this stack no l
 any.
 
 Every container start writes a snapshot before the app serves traffic (newest 20 kept, at
-most one every five minutes). To restore one:
+most one every five minutes). `scripts/backup.sh` copies the database with SQLite's online
+backup API — safe while the app is serving, unlike copying the `.sqlite3` file next to its
+`-wal` — verifies the copy with `PRAGMA quick_check`, and tars it together with the evidence
+files. To restore one:
 
 ```bash
 docker compose down
 docker compose run --rm --entrypoint sh soc-alert-tracker scripts/restore-data.sh /app/backups/soc-data-YYYYmmdd-HHMMSS.tar.gz /app/data --force
 docker compose up -d
 ```
+
+For a nightly snapshot while the stack is running, use the host scheduler. Linux or WSL
+(`crontab -e`), 02:00 daily, keep 30, no minimum interval:
+
+```cron
+0 2 * * * cd /path/to/SOC-Tracker && docker compose exec -T soc-alert-tracker sh scripts/backup.sh /app/data /app/backups 30 0 >> /var/log/soc-tracker-backup.log 2>&1
+```
+
+On Windows, create a daily Task Scheduler job that runs:
+
+```powershell
+powershell -Command "cd D:\IT\automation_script\SOC-Tracker; docker compose exec -T soc-alert-tracker sh scripts/backup.sh /app/data /app/backups 30 0"
+```
+
+Test the restore path, not just the backup: run the restore commands above against a
+snapshot at least once a quarter. A backup nobody has restored is a guess.
 
 Updating is then just:
 
@@ -177,6 +196,12 @@ Create users, manage roles (L1/L2/L3), and reset passwords.
 
 *L1 can edit assigned alerts while they remain open or in progress; closed tickets are read-only for L1.
 
+### Account lifecycle
+
+Admins create users on the **Users** page and can deactivate or reactivate them from the same row. A deactivated account cannot sign in (the login form gives the same "invalid username or password" answer, so it does not confirm which accounts exist), and any session it already holds stops working on the next request. Deactivation is reversible and keeps the account, its tickets and its audit trail; nothing is deleted. Two guards apply: you cannot deactivate yourself, and the last active administrator cannot be deactivated.
+
+Timestamps are stored in UTC and rendered in the configured zone (`DISPLAY_TIMEZONE`, default `Asia/Yangon`) with the zone labelled above the activity log and the audit table.
+
 ### Elastic JSON import
 
 Paste raw Elastic alert JSON directly into the tracker. Supported shapes:
@@ -228,6 +253,7 @@ All settings are controlled via environment variables. See `.env.example` for th
 | `LOGIN_ACCOUNT_LOCKOUT_THRESHOLD` | No | `10`                 | Failed attempts per account, any address |
 | `LOGIN_LOCKOUT_SECONDS`  | No       | `300`                  | Lockout duration in seconds              |
 | `TRUSTED_PROXIES`        | No       | `127.0.0.1/32,::1/128` | Peers allowed to set `X-Forwarded-For`   |
+| `DISPLAY_TIMEZONE`       | No       | `Asia/Yangon`          | Zone used to render stored UTC times     |
 
 `TRUSTED_PROXIES` matters behind nginx or a Docker port mapping: the app resolves
 the client address from `X-Forwarded-For` only when the direct peer is in this
