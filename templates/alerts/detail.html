@@ -144,7 +144,7 @@
     <h2>Investigation note</h2>
     <form method="post" action="/alerts/{{ alert.pk }}/notes/" class="form-grid">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <textarea name="note" rows="4" placeholder="Add triage steps, containment actions, evidence, or handoff context" required></textarea>
+      <textarea name="note" rows="3" class="compact-textarea" placeholder="Add triage steps, containment actions, evidence, or handoff context" required></textarea>
       <div class="form-actions">
         <button class="primary" type="submit">Add note</button>
       </div>
