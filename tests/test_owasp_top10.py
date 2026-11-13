@@ -13,13 +13,14 @@ from sqlalchemy.orm import sessionmaker
 from soc_tracker.models import Base, User, Alert, AlertEvent, AuditLog, Evidence
 from soc_tracker.auth import hash_password, verify_password
 
+from tests.support import make_engine
+
 
 @pytest.fixture
 def engine():
-    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
-    Base.metadata.create_all(bind=engine)
+    engine = make_engine()
     yield engine
-    Base.metadata.drop_all(bind=engine)
+    engine.dispose()
 
 
 @pytest.fixture
@@ -188,10 +189,11 @@ class TestA02CryptographicFailures:
         assert "pbkdf2_sha256" in user.password_hash
 
     def test_session_cookie_httponly(self, client):
-        login_with_csrf(client, "l1", "Password123!")
-        for cookie in client.cookies.jar:
-            if cookie.name == "session":
-                assert cookie.httponly
+        response = login_with_csrf(client, "l1", "Password123!")
+        session_headers = [h for h in response.headers.get_list("set-cookie") if h.startswith("session=")]
+        assert session_headers, "login did not set a session cookie"
+        for header in session_headers:
+            assert "httponly" in header.lower()
 
 
 # ============================================================================
@@ -255,15 +257,22 @@ class TestA04InsecureDesign:
         alert = create_test_alert(db, status="WIP")
         csrf = get_csrf(l1_session)
         response = l1_session.post(f"/alerts/{alert.id}/close/", data={"resolution_summary": "", "csrf_token": csrf})
-        assert "Resolution summary is required" in response.text
+        assert response.status_code == 303
+        db.refresh(alert)
+        assert alert.status == "WIP", "empty resolution summary must not close the ticket"
+        follow_up = l1_session.get(alert.get_absolute_url())
+        assert "Resolution summary is required" in follow_up.text
         response = l1_session.post(f"/alerts/{alert.id}/close/", data={"resolution_summary": "Short", "csrf_token": csrf})
         assert response.status_code == 303
+        db.refresh(alert)
+        assert alert.status == "Closed"
 
     def test_session_expiry(self, client):
         response = login_with_csrf(client, "l1", "Password123!")
-        for header in response.headers.getlist("set-cookie"):
-            if "session" in header:
-                assert "max-age" in header.lower() or "Max-Age" in header
+        session_headers = [h for h in response.headers.get_list("set-cookie") if h.startswith("session=")]
+        assert session_headers
+        for header in session_headers:
+            assert "max-age" in header.lower()
 
 
 # ============================================================================

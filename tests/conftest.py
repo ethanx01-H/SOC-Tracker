@@ -1,28 +1,38 @@
 """Pytest configuration and fixtures."""
 
 import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
-from soc_tracker.models import Base, User
+from soc_tracker import middleware
 from soc_tracker.auth import hash_password
+from soc_tracker.models import User
+
+from tests.support import make_engine, make_session_factory
+
+
+@pytest.fixture(autouse=True)
+def reset_security_state():
+    """Rate limits and lockout counters are module globals; keep tests independent."""
+    middleware.reset_security_state()
+    yield
+    middleware.reset_security_state()
 
 
 @pytest.fixture
 def engine():
-    """Create in-memory SQLite engine for testing."""
-    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
-    Base.metadata.create_all(bind=engine)
+    """Create one shared in-memory SQLite engine for testing.
+
+    A plain ``sqlite:///:memory:`` URL gives every connection its own empty
+    database, so the app thread never sees the rows the test inserted.
+    """
+    engine = make_engine()
     yield engine
-    Base.metadata.drop_all(bind=engine)
+    engine.dispose()
 
 
 @pytest.fixture
 def db(engine):
     """Create database session for testing."""
-    SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
-    session = SessionLocal()
+    session = make_session_factory(engine)()
     yield session
     session.close()
 

@@ -92,7 +92,8 @@ class TestFormValues:
         assert result["source"] == "Manual"
         assert result["severity"] == "High"
         assert result["status"] == "Open"
-        assert result["analyst"] == "l1"
+        # New tickets are always created unassigned; assignment is a separate action.
+        assert result["analyst"] == "Unassigned"
         assert result["tactic"] == "Initial Access"
         assert result["asset"] == "server01"
         assert result["iocs"] == ["192.168.1.1", "evil.com"]
@@ -155,7 +156,8 @@ class TestFormValues:
         assert result["title"] == "Test Alert"
         assert result["description"] == "Test description"
         assert result["source"] == "Manual"
-        assert result["analyst"] == "l1"
+        # The analyst field is ignored on create: tickets start unassigned.
+        assert result["analyst"] == "Unassigned"
         assert result["tactic"] == "Initial Access"
         assert result["asset"] == "server01"
 
