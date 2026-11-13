@@ -8,7 +8,7 @@
 </header>
 <section class="panel">
   {% if error %}<div class="message">{{ error }}</div>{% endif %}
-  <form method="post" class="form-grid">
+  <form method="post" class="form-grid" {% if not alert %}enctype="multipart/form-data"{% endif %}>
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <p>
       <label for="title">Title</label>
@@ -46,6 +46,14 @@
       <label for="sla_hours">SLA hours</label>
       <input id="sla_hours" name="sla_hours" type="number" min="1" max="168" value="{{ form.get('sla_hours', 8) }}">
     </p>
+    {% if not alert %}
+    <p>
+      <label for="evidence_files">Evidence files (optional)</label>
+      <input id="evidence_files" name="evidence_files" type="file" multiple
+             accept=".xlsx,.csv,.jpg,.jpeg,.png,.txt,.log,.json,.pdf,.pcap,.pcapng">
+      <span class="muted">Attach what you already have — screenshots, exports, packet captures. Up to 20 MB each, 25 MB per submission. You can add more later from the ticket.</span>
+    </p>
+    {% endif %}
     <div class="form-actions">
       <a class="button" href="{% if alert %}/alerts/{{ alert.pk }}/{% else %}/alerts/{% endif %}">Cancel</a>
       <button class="primary" type="submit">Save alert</button>

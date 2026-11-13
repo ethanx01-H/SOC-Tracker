@@ -8,6 +8,7 @@ import math
 import secrets
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Mapping
 from urllib.parse import urlencode
 
 from sqlalchemy import func, or_, select
@@ -178,7 +179,7 @@ def filtered_alerts_paginated(db: Session, request, page: int = 1, per_page: int
     }
 
 
-def form_values(form: dict) -> dict:
+def form_values(form: Mapping[str, str]) -> dict:
     """Extract and validate alert form values."""
     iocs_text = form.get("iocs_text", "")
     title = form.get("title", "").strip()

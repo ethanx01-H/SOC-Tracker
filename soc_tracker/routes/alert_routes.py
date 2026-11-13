@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from starlette.datastructures import UploadFile as FormUpload
 
 from ..auth import (
     can_create_alert,
@@ -29,6 +30,7 @@ from ..services.alert_service import (
     sla_status,
 )
 from ..services.chart_service import chart_counts
+from ..services.evidence_service import EvidenceError, read_upload, store_evidence
 from ..utils import audit, redirect_to, render
 
 logger = logging.getLogger("soc_tracker.alert_routes")
@@ -100,22 +102,38 @@ async def alert_create_page(request: Request, db: Session = Depends(get_db), use
 async def alert_create(request: Request, db: Session = Depends(get_db), user: User = Depends(require_user)):
     if not can_create_alert(user):
         raise HTTPException(status_code=403)
-    form = dict(await request.form())
+    form = await request.form()
+    uploads = [item for item in form.getlist("evidence_files") if isinstance(item, FormUpload) and item.filename]
     try:
         values = form_values(form)
-    except ValueError as e:
+        if not values["title"]:
+            raise ValueError("Title is required.")
+        # Read and validate every attachment before touching the database, so a
+        # rejected file cannot leave a half-created ticket behind.
+        prepared = [await read_upload(upload) for upload in uploads]
+    except (ValueError, EvidenceError) as error:
         return render(request, "alerts/form.html", {
-            "title": "New alert", "alert": None, "form": form, "error": str(e)
-        }, db, user)
-    if not values["title"]:
-        return render(request, "alerts/form.html", {
-            "title": "New alert", "alert": None, "form": form, "error": "Title is required."
+            "title": "New alert", "alert": None, "form": form, "error": str(error)
         }, db, user)
     values["status"] = "Open"
     values["analyst"] = "Unassigned"
     alert = create_alert(db, values, user)
-    audit(db, user, "alert.created", f"Created {alert.alert_id}.", "alert", alert.alert_id, request)
-    db.commit()
+    written = []
+    try:
+        for (name, content), upload in zip(prepared, uploads):
+            _, path = store_evidence(db, alert, user, name, content, upload.content_type)
+            written.append(path)
+        message = f"Created {alert.alert_id}."
+        if prepared:
+            message = f"Created {alert.alert_id} with {len(prepared)} evidence file(s)."
+        audit(db, user, "alert.created", message, "alert", alert.alert_id, request)
+        db.commit()
+    except Exception:
+        # Nothing half-written: drop the rows and the files just saved.
+        db.rollback()
+        for path in written:
+            path.unlink(missing_ok=True)
+        raise
     return redirect_to(alert.get_absolute_url(), f"Created {alert.alert_id}.")
 
 

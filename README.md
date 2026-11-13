@@ -178,8 +178,8 @@ Create users, manage roles (L1/L2/L3), and reset passwords.
 - L1, L2, and L3 users can assign unassigned Open tickets to themselves
 - Optional IOCs when creating tickets; close summaries have no application-level word-count limit
 - Filter by severity, status, search terms; CSV export of filtered results
-- Evidence file uploads with SHA-256 integrity tracking
-- Evidence uploads accept `.xlsx`, `.csv`, `.jpg`, and `.png` files
+- Evidence file uploads with SHA-256 integrity tracking — attach files while creating the ticket, or add more later from the alert page
+- Evidence uploads accept `.xlsx`, `.csv`, `.jpg`, `.jpeg`, `.png`, `.txt`, `.log`, `.json`, `.pdf`, `.pcap`, `.pcapng`, up to 20 MB each (25 MB per submission); a rejected file cancels the whole create, so no half-made ticket is left behind
 - Investigation notes and activity-log timeline per alert
 
 ### Role-based access control

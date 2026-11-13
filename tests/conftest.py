@@ -25,8 +25,10 @@ def isolate_evidence_dir(tmp_path, monkeypatch):
     bind-mounted folder the team uses for real evidence.
     """
     from soc_tracker.routes import evidence_routes
+    from soc_tracker.services import evidence_service
 
     monkeypatch.setattr(evidence_routes, "UPLOAD_DIR", tmp_path)
+    monkeypatch.setattr(evidence_service, "UPLOAD_DIR", tmp_path)
 
 
 @pytest.fixture
