@@ -599,7 +599,7 @@ p {
   display: none;
 }
 
-.lightbox:target {
+.lightbox.is-open {
   display: flex;
   position: fixed;
   inset: 0;
@@ -608,6 +608,10 @@ p {
   justify-content: center;
   padding: 24px;
   background: rgba(8, 12, 18, 0.82);
+}
+
+body.lightbox-open {
+  overflow: hidden;
 }
 
 .lightbox-backdrop {

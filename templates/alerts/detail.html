@@ -108,7 +108,7 @@
         <div class="evidence-grid">
           {% for item in images %}
             <figure class="evidence-card">
-              <a class="evidence-open" href="#preview-{{ item.id }}" title="Open {{ item.original_name }}">
+              <a class="evidence-open" href="/evidence/{{ item.id }}/preview/" data-preview="preview-{{ item.id }}" title="Open {{ item.original_name }}">
                 <img src="/evidence/{{ item.id }}/preview/" alt="{{ item.original_name }}" loading="lazy">
               </a>
               <figcaption>
@@ -117,7 +117,7 @@
               </figcaption>
             </figure>
             <div id="preview-{{ item.id }}" class="lightbox">
-              <a class="lightbox-backdrop" href="#" aria-label="Close preview"></a>
+              <a class="lightbox-backdrop" href="/alerts/{{ alert.pk }}/" aria-label="Close preview"></a>
               <figure>
                 <img src="/evidence/{{ item.id }}/preview/" alt="{{ item.original_name }}">
                 <figcaption>
@@ -125,7 +125,7 @@
                   <span class="muted">SHA-256 {{ item.sha256 }}</span>
                   <span class="lightbox-actions">
                     <a href="/evidence/{{ item.id }}/">Download</a>
-                    <a href="#">Close</a>
+                    <a class="lightbox-close" href="/alerts/{{ alert.pk }}/">Close</a>
                   </span>
                 </figcaption>
               </figure>
@@ -175,4 +175,5 @@
     </div>
   </section>
 </article>
+<script src="{{ url_for('static', path='alerts/lightbox.js') }}" defer></script>
 {% endblock %}

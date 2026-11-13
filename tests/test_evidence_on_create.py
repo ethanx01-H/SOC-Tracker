@@ -206,3 +206,8 @@ def test_detail_page_shows_thumbnail_and_no_upload_box(sessions):
     assert f'src="/evidence/{image.id}/preview/"' in page
     assert f'id="preview-{image.id}"' in page
     assert "lightbox" in page
+    # The opener must not use a #fragment: a hash-driven popup reopens itself when
+    # the analyst navigates back to the ticket.
+    assert f'href="#preview-{image.id}"' not in page
+    assert f'data-preview="preview-{image.id}"' in page
+    assert "alerts/lightbox.js" in page
