@@ -5,13 +5,13 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from ..auth import can_manage_users, hash_password, validate_password_strength, require_user, UserDep
 from ..config import ROLES
 from ..dependencies import get_db
-from ..models import AuditLog, User
+from ..models import Alert, AlertEvent, AuditLog, Evidence, User
 from ..utils import audit, redirect_to, render
 
 logger = logging.getLogger("soc_tracker.admin_routes")
@@ -148,6 +148,87 @@ async def user_set_active(
     db.commit()
     logger.info("User '%s' %s by %s", target.username, "activated" if activate else "deactivated", user.username)
     return redirect_to("/admin/users/", f"{'Activated' if activate else 'Deactivated'} {target.username}.")
+
+
+@router.post("/admin/users/{user_id}/delete/")
+async def user_delete(
+    request: Request,
+    user_id: int,
+    user: UserDep,
+    db: Session = Depends(get_db),
+):
+    """Remove an account that never touched a ticket.
+
+    SQLite here does not enforce foreign keys, so deleting a user who worked
+    tickets would not fail loudly — it would blank "Created by"/"Assigned to" on
+    their alerts and orphan their audit rows. Refuse instead and point at
+    deactivation, which keeps attribution intact.
+    """
+    if not can_manage_users(user):
+        raise HTTPException(status_code=403)
+    target = db.get(User, user_id)
+    if not target:
+        raise HTTPException(status_code=404)
+    if target.id == user.id:
+        return redirect_to("/admin/users/", "You cannot delete your own account.")
+    if target.is_admin:
+        remaining = db.scalar(
+            select(func.count(User.id)).where(
+                User.is_admin.is_(True), User.is_active.is_(True), User.id != target.id
+            )
+        )
+        if not remaining:
+            return redirect_to("/admin/users/", "At least one active administrator is required.")
+
+    history = user_history(db, target)
+    if history["total"]:
+        return redirect_to(
+            "/admin/users/",
+            f"Cannot delete {target.username}: {describe_history(history)} reference this account. "
+            "Deactivate it instead so tickets and the audit trail keep their attribution.",
+        )
+
+    audit(db, user, "user.deleted", f"Deleted user {target.username}.", "user", target.username, request)
+    db.delete(target)
+    db.commit()
+    logger.info("User '%s' deleted by %s", target.username, user.username)
+    return redirect_to("/admin/users/", f"Deleted user {target.username}.")
+
+
+def user_history(db: Session, target: User) -> dict[str, int]:
+    """Count everything that points at this account."""
+    alerts = db.scalar(select(func.count(Alert.id)).where(or_(
+        Alert.created_by_id == target.id,
+        Alert.assigned_to_id == target.id,
+        Alert.assigned_by_id == target.id,
+        Alert.updated_by_id == target.id,
+        Alert.escalated_by_id == target.id,
+    ))) or 0
+    events = db.scalar(select(func.count(AlertEvent.id)).where(or_(
+        AlertEvent.actor_id == target.id,
+        AlertEvent.assigned_to_id == target.id,
+        AlertEvent.assigned_from_id == target.id,
+    ))) or 0
+    evidence = db.scalar(select(func.count(Evidence.id)).where(Evidence.uploaded_by_id == target.id)) or 0
+    logs = db.scalar(select(func.count(AuditLog.id)).where(AuditLog.actor_id == target.id)) or 0
+    counts = {"alerts": alerts, "events": events, "evidence": evidence, "audit": logs}
+    counts["total"] = sum(counts.values())
+    return counts
+
+
+def describe_history(history: dict[str, int]) -> str:
+    labels = (
+        ("alerts", "ticket", "tickets"),
+        ("events", "timeline event", "timeline events"),
+        ("evidence", "evidence file", "evidence files"),
+        ("audit", "audit entry", "audit entries"),
+    )
+    parts = [
+        f"{history[key]} {singular if history[key] == 1 else plural}"
+        for key, singular, plural in labels
+        if history[key]
+    ]
+    return ", ".join(parts)
 
 
 @router.get("/admin/audit/", response_class=HTMLResponse)

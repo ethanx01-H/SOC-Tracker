@@ -198,7 +198,11 @@ Create users, manage roles (L1/L2/L3), and reset passwords.
 
 ### Account lifecycle
 
-Admins create users on the **Users** page and can deactivate or reactivate them from the same row. A deactivated account cannot sign in (the login form gives the same "invalid username or password" answer, so it does not confirm which accounts exist), and any session it already holds stops working on the next request. Deactivation is reversible and keeps the account, its tickets and its audit trail; nothing is deleted. Two guards apply: you cannot deactivate yourself, and the last active administrator cannot be deactivated.
+Admins create users on the **Users** page and can deactivate, reactivate or delete them from the same row. A deactivated account cannot sign in (the login form gives the same "invalid username or password" answer, so it does not confirm which accounts exist), and any session it already holds stops working on the next request. Deactivation is reversible and keeps the account, its tickets and its audit trail; nothing is deleted.
+
+**Delete** removes the row permanently, but only for an account with no history — no tickets, timeline events, evidence or audit entries. If anything references the account the delete is refused, and the message states how many records would lose their attribution. That refusal is deliberate: SQLite here does not enforce foreign keys, so deleting a user who worked tickets would not raise an error, it would quietly leave "Created by" and "Assigned to" blank on their incidents. For a leaver who touched tickets, deactivate instead — access ends immediately and the record stays intact.
+
+Two guards apply to both actions: you cannot act on your own account, and the last active administrator cannot be removed.
 
 Timestamps are stored in UTC and rendered in the configured zone (`DISPLAY_TIMEZONE`, default `Asia/Yangon`) with the zone labelled above the activity log and the audit table.
 

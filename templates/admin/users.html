@@ -68,6 +68,10 @@
             <input type="hidden" name="is_active" value="{{ 'false' if managed_user.is_active else 'true' }}">
             <button type="submit">{{ 'Deactivate' if managed_user.is_active else 'Reactivate' }}</button>
           </form>
+          <form method="post" action="/admin/users/{{ managed_user.id }}/delete/" class="inline-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" title="Only possible for accounts with no tickets, evidence or audit history">Delete</button>
+          </form>
         </div>
       {% else %}
         <div class="empty">No users found</div>
