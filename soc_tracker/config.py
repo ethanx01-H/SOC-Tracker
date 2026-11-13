@@ -47,6 +47,8 @@ SEVERITY_LABELS = {
     "Informational": "4 - Informational",
 }
 ROLES = ["L1", "L2", "L3"]
+# Timestamps are stored in UTC and rendered in this zone for analysts.
+DISPLAY_TIMEZONE = os.environ.get("DISPLAY_TIMEZONE", "Asia/Yangon")
 ALEMBIC_HEAD = "0006_alert_external_id"
 
 LOGIN_LOCKOUT_THRESHOLD = int(os.environ.get("LOGIN_LOCKOUT_THRESHOLD", "5"))

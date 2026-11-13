@@ -8,6 +8,7 @@ itsdangerous>=2.2.0,<3.0
 httpx>=0.28.1,<1.0
 alembic>=1.14.0,<2.0
 python-dotenv>=1.0.0,<2.0
+tzdata>=2024.1
 
 # Testing
 pytest>=8.0.0,<9.0

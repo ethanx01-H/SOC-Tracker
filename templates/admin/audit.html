@@ -9,10 +9,11 @@
 </header>
 
 <section class="panel">
+  <p class="muted">Newest 200 events. Times shown in {{ display_timezone }}.</p>
   <div class="table audit-table">
     {% for log in logs %}
       <div class="table-row audit-row">
-        <span>{{ log.created_at }}</span>
+        <span>{{ log.created_at|localdt }}</span>
         <strong>{{ log.action }}</strong>
         <span>{{ log.actor or "system" }}</span>
         <span>{{ log.target_type }} {{ log.target_id }}</span>

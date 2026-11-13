@@ -2,7 +2,9 @@
 
 import logging
 import secrets
+from datetime import datetime, timedelta, timezone
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from fastapi import Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -17,7 +19,7 @@ from .auth import (
     signer,
     user_role,
 )
-from .config import BASE_DIR, COOKIE_SECURE, ROLES, SEVERITIES, SEVERITY_LABELS, STATUSES
+from .config import BASE_DIR, COOKIE_SECURE, DISPLAY_TIMEZONE, ROLES, SEVERITIES, SEVERITY_LABELS, STATUSES
 from .models import AuditLog, User
 from .net import client_ip
 from .services.alert_service import sla_status
@@ -25,6 +27,39 @@ from .services.alert_service import sla_status
 logger = logging.getLogger("soc_tracker.utils")
 
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
+DISPLAY_TZ = ZoneInfo(DISPLAY_TIMEZONE)
+
+
+def to_local(value, fmt: str = "%Y-%m-%d %H:%M:%S") -> str:
+    """Render a stored UTC timestamp in the team's timezone.
+
+    Timestamps are written to SQLite as naive UTC (``datetime.now(timezone.utc)``
+    into a DateTime column), so a naive value is treated as UTC before the
+    conversion. Without this every timeline and audit row is off by the zone
+    offset — 6h30m for Asia/Yangon.
+    """
+    if value is None or value == "":
+        return ""
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value)
+        except ValueError:
+            return value
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(DISPLAY_TZ).strftime(fmt)
+
+
+def timezone_label() -> str:
+    """Human label for the display zone, e.g. 'Asia/Yangon (UTC+06:30)'."""
+    offset = datetime.now(DISPLAY_TZ).utcoffset() or timedelta(0)
+    total = int(offset.total_seconds())
+    sign = "+" if total >= 0 else "-"
+    total = abs(total)
+    return f"{DISPLAY_TIMEZONE} (UTC{sign}{total // 3600:02d}:{total % 3600 // 60:02d})"
+
+
+templates.env.filters["localdt"] = to_local
 
 
 def csrf_token_for(request: Request) -> str:
@@ -66,6 +101,7 @@ def base_context(request: Request, user: User | None, db: Session) -> dict:
         "severity_labels": SEVERITY_LABELS,
         "roles": ROLES,
         "sla_status": sla_status,
+        "display_timezone": timezone_label(),
         "csrf_token": csrf_token_for(request),
     }
 

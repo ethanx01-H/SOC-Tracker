@@ -121,13 +121,13 @@
     </div>
   </section>
   <section>
-    <h2>Activity log</h2>
+    <h2>Activity log <span class="muted">({{ display_timezone }})</span></h2>
     <div class="timeline">
       {% for event in alert.events %}
         <article class="timeline-item">
           <div>
             <strong>{{ event.event_type_display }}</strong>
-            <span class="muted">{{ event.created_at }}</span>
+            <span class="muted">{{ event.created_at|localdt }}</span>
           </div>
           <p>{{ event.message }}</p>
           {% if event.assigned_to %}
