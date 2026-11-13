@@ -17,6 +17,18 @@ def reset_security_state():
     middleware.reset_security_state()
 
 
+@pytest.fixture(autouse=True)
+def isolate_evidence_dir(tmp_path, monkeypatch):
+    """Keep test uploads out of the real data/evidence directory.
+
+    The upload route writes to config.UPLOAD_DIR, which in Docker is the same
+    bind-mounted folder the team uses for real evidence.
+    """
+    from soc_tracker.routes import evidence_routes
+
+    monkeypatch.setattr(evidence_routes, "UPLOAD_DIR", tmp_path)
+
+
 @pytest.fixture
 def engine():
     """Create one shared in-memory SQLite engine for testing.
