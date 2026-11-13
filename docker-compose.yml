@@ -12,16 +12,20 @@ services:
       # a different range, set TRUSTED_PROXIES explicitly — do not add ranges
       # that can reach port 8080 directly, or clients can spoof their address.
       TRUSTED_PROXIES: ${TRUSTED_PROXIES:-172.16.0.0/12}
+      DATA_DIR: /app/data
+      BACKUP_DIR: /app/backups
     ports:
       - "127.0.0.1:8080:8080"
     volumes:
-      - soc_tracker_data:/app/data
+      # Host directories, not Docker volumes, on purpose:
+      # `docker compose down -v`, `docker volume rm`, `docker volume prune` and
+      # `docker system prune --volumes` only ever remove Docker-managed volumes,
+      # so none of them can delete the team's alerts or evidence.
+      - ./data:/app/data
+      - ${SOC_BACKUP_DIR:-./backups}:/app/backups
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8080/healthz', timeout=3)"]
       interval: 30s
       timeout: 5s
       retries: 3
-
-volumes:
-  soc_tracker_data:

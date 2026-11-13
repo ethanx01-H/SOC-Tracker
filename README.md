@@ -71,9 +71,56 @@ The command prompts for the password twice. Create L1/L2 users from the administ
 
 This compose setup binds to localhost for review and defaults to non-secure cookies so it works over local HTTP. For production, set `APP_ENV=production` and `COOKIE_SECURE=1`, put the app behind HTTPS, and restrict access to the proxy/network. Do not expose port 8080 directly to the internet. [nginx.conf](nginx.conf) is an example HTTPS reverse proxy configuration; update its hostname and certificate paths before enabling it.
 
+### Where the data lives, and how to update safely
+
+The compose file bind-mounts host directories instead of using Docker volumes:
+
+- `./data` → `/app/data` — the SQLite database, its WAL files, and `evidence/`
+- `./backups` → `/app/backups` — automatic snapshots (override with `SOC_BACKUP_DIR`)
+
+Because those are host directories, `docker compose down -v`, `docker volume rm`,
+`docker volume prune` and `docker system prune --volumes` cannot delete the alerts or the
+evidence. Those commands only remove Docker-managed volumes, and this stack no longer has
+any.
+
+Every container start writes a snapshot before the app serves traffic (newest 20 kept, at
+most one every five minutes). To restore one:
+
+```bash
+docker compose down
+docker compose run --rm --entrypoint sh soc-alert-tracker scripts/restore-data.sh /app/backups/soc-data-YYYYmmdd-HHMMSS.tar.gz /app/data --force
+docker compose up -d
+```
+
+Updating is then just:
+
+```bash
+docker compose down
+docker compose up -d --build
+```
+
+Moving data out of the old named volume, only if you ran an earlier compose file:
+
+```powershell
+docker compose down
+docker run --rm -v soc-tracker_soc_tracker_data:/from -v "${PWD}\data:/to" alpine sh -c "cp -a /from/. /to/"
+docker compose up -d --build
+```
+
+```bash
+# same thing from WSL or Linux
+docker run --rm -v soc-tracker_soc_tracker_data:/from -v "$PWD/data:/to" alpine sh -c "cp -a /from/. /to/"
+```
+
+Confirm the tickets are there, then remove the old volume with `docker volume rm
+soc-tracker_soc_tracker_data`. On a Linux host the container runs as uid 1000, so make the
+directory writable: `chown -R 1000:1000 data backups`. Since the container and a local
+`uvicorn main:app` now share `./data`, run one at a time — two writers on one SQLite file
+is how databases get corrupted.
+
 ### Data storage and retention
 
-The local/demo app stores alert, account, event, and audit records in `data/fastapi.sqlite3` and evidence files in `data/evidence/`. In Docker, both are under `/app/data` in the `soc_tracker_data` volume. Alert deletion is disabled, and the app does not automatically expire records or evidence; this is persistence, not a guaranteed retention policy. Removing the Docker volume or losing the host can still destroy the data.
+The local/demo app stores alert, account, event, and audit records in `data/fastapi.sqlite3` and evidence files in `data/evidence/`. In Docker, both are under `/app/data`, bind-mounted from `./data` on the host (see above). Alert deletion is disabled, and the app does not automatically expire records or evidence; this is persistence, not a guaranteed retention policy. Removing the host directory or losing the host can still destroy the data — the snapshots in `./backups` are the recovery point.
 
 The current SQLite setup is for a single-instance pilot and does not provide a production two-year retention guarantee. Before production, use a managed database with durable backups and a tested restore process, and durable evidence storage with a lifecycle/retention policy that keeps incident records and evidence for at least 730 days. Protect audit exports separately (ideally immutable storage), monitor backup/retention jobs, and verify restores. Keep database, evidence, and audit retention aligned; do not enable automatic deletion before the required retention period. Request limiting and login lockout are in process memory; keep one worker and use proxy-level limits unless a shared limiter is configured. Set `TRUSTED_PROXIES` to the addresses of your reverse proxy so lockouts, rate limits, and audit rows key on the real client address rather than the proxy.
 
