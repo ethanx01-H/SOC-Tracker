@@ -6,8 +6,8 @@ BACKUP_DIR=${BACKUP_DIR:-/app/backups}
 
 # Snapshot the data before anything else touches it. This runs before the app
 # serves traffic, so the database and its WAL file are captured consistently.
-if [ -f /app/scripts/backup-data.sh ]; then
-    sh /app/scripts/backup-data.sh "$DATA_DIR" "$BACKUP_DIR" "${BACKUP_KEEP:-20}" "${BACKUP_MIN_INTERVAL:-300}" \
+if [ -f /app/scripts/backup.sh ]; then
+    sh /app/scripts/backup.sh "$DATA_DIR" "$BACKUP_DIR" "${BACKUP_KEEP:-20}" "${BACKUP_MIN_INTERVAL:-300}" \
         || echo "WARNING: data snapshot failed, starting anyway" >&2
 fi
 
