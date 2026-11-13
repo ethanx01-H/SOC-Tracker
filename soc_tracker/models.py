@@ -4,7 +4,7 @@ import json
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, create_engine, event
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, create_engine, event, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship, sessionmaker
 
 from .config import SQLITE_PATH
@@ -42,6 +42,7 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(2), default="L1")
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("1"))
 
     def __str__(self) -> str:
         return self.username
@@ -56,19 +57,19 @@ class Alert(Base):
     title: Mapped[str] = mapped_column(String(180))
     description: Mapped[str] = mapped_column(Text, default="")
     source: Mapped[str] = mapped_column(String(80), default="Manual")
-    severity: Mapped[str] = mapped_column(String(20), default="Medium")
-    status: Mapped[str] = mapped_column(String(20), default="Open")
-    analyst: Mapped[str] = mapped_column(String(80), default="Unassigned")
+    severity: Mapped[str] = mapped_column(String(20), default="Medium", index=True)
+    status: Mapped[str] = mapped_column(String(20), default="Open", index=True)
+    analyst: Mapped[str] = mapped_column(String(80), default="Unassigned", index=True)
     tactic: Mapped[str] = mapped_column(String(100), default="Unknown")
     asset: Mapped[str] = mapped_column(String(160), default="Unknown")
     iocs_json: Mapped[str] = mapped_column(Text, default="[]")
     sla_hours: Mapped[int] = mapped_column(Integer, default=8)
-    assigned_to_id: Mapped[Optional[int]] = mapped_column(ForeignKey("fastapi_users.id"), nullable=True)
+    assigned_to_id: Mapped[Optional[int]] = mapped_column(ForeignKey("fastapi_users.id"), nullable=True, index=True)
     assigned_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("fastapi_users.id"), nullable=True)
     created_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("fastapi_users.id"), nullable=True)
     updated_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("fastapi_users.id"), nullable=True)
     escalated_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("fastapi_users.id"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     assigned_to: Mapped[Optional[User]] = relationship(foreign_keys=[assigned_to_id])
@@ -102,7 +103,7 @@ class AlertEvent(Base):
     __tablename__ = "fastapi_alert_events"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    alert_id: Mapped[int] = mapped_column(ForeignKey("fastapi_alerts.id"))
+    alert_id: Mapped[int] = mapped_column(ForeignKey("fastapi_alerts.id"), index=True)
     event_type: Mapped[str] = mapped_column(String(20))
     message: Mapped[str] = mapped_column(Text)
     actor_id: Mapped[Optional[int]] = mapped_column(ForeignKey("fastapi_users.id"), nullable=True)
@@ -124,12 +125,15 @@ class AlertEvent(Base):
 
 class Evidence(Base):
     __tablename__ = "fastapi_evidence"
+    # Declared as a unique index (not a column-level UNIQUE) so the model matches
+    # what migration 0002 created; otherwise alembic autogenerate reports drift.
+    __table_args__ = (Index("ix_fastapi_evidence_stored_name", "stored_name", unique=True),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    alert_id: Mapped[int] = mapped_column(ForeignKey("fastapi_alerts.id"))
+    alert_id: Mapped[int] = mapped_column(ForeignKey("fastapi_alerts.id"), index=True)
     uploaded_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("fastapi_users.id"), nullable=True)
     original_name: Mapped[str] = mapped_column(String(255))
-    stored_name: Mapped[str] = mapped_column(String(255), unique=True)
+    stored_name: Mapped[str] = mapped_column(String(255))
     content_type: Mapped[str] = mapped_column(String(120), default="application/octet-stream")
     size_bytes: Mapped[int] = mapped_column(Integer, default=0)
     sha256: Mapped[str] = mapped_column(String(64))
@@ -149,6 +153,6 @@ class AuditLog(Base):
     target_id: Mapped[str] = mapped_column(String(80), default="")
     message: Mapped[str] = mapped_column(Text)
     source_ip: Mapped[str] = mapped_column(String(80), default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
     actor: Mapped[Optional[User]] = relationship()

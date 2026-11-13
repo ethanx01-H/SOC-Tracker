@@ -5,7 +5,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..auth import can_manage_users, hash_password, validate_password_strength, require_user, UserDep
@@ -112,6 +112,42 @@ async def user_password_reset(
     db.commit()
     logger.info("Password reset for '%s' by %s", target.username, user.username)
     return redirect_to("/admin/users/", f"Reset password for {target.username}.")
+
+
+@router.post("/admin/users/{user_id}/active/")
+async def user_set_active(
+    request: Request,
+    user_id: int,
+    is_active: Annotated[str, Form()],
+    user: UserDep,
+    db: Session = Depends(get_db),
+):
+    if not can_manage_users(user):
+        raise HTTPException(status_code=403)
+    target = db.get(User, user_id)
+    if not target:
+        raise HTTPException(status_code=404)
+    activate = is_active == "true"
+    if not activate and target.id == user.id:
+        return redirect_to("/admin/users/", "You cannot deactivate your own account.")
+    if not activate and target.is_admin:
+        remaining = db.scalar(
+            select(func.count(User.id)).where(
+                User.is_admin.is_(True), User.is_active.is_(True), User.id != target.id
+            )
+        )
+        if not remaining:
+            return redirect_to("/admin/users/", "At least one active administrator is required.")
+    target.is_active = activate
+    audit(
+        db, user,
+        "user.activated" if activate else "user.deactivated",
+        f"{'Activated' if activate else 'Deactivated'} {target.username}.",
+        "user", target.username, request,
+    )
+    db.commit()
+    logger.info("User '%s' %s by %s", target.username, "activated" if activate else "deactivated", user.username)
+    return redirect_to("/admin/users/", f"{'Activated' if activate else 'Deactivated'} {target.username}.")
 
 
 @router.get("/admin/audit/", response_class=HTMLResponse)

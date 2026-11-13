@@ -66,7 +66,10 @@ def current_user(request: Request, db: Session) -> User | None:
     except (BadSignature, SignatureExpired):
         return None
     user = db.get(User, data.get("user_id"))
-    if not user or not hmac.compare_digest(data.get("session_stamp", ""), session_stamp(user)):
+    if not user or not user.is_active:
+        # A deactivated account loses its existing sessions on the next request.
+        return None
+    if not hmac.compare_digest(data.get("session_stamp", ""), session_stamp(user)):
         return None
     return user
 

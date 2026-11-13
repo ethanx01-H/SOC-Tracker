@@ -48,7 +48,7 @@
         <div class="table-row user-row">
           <strong>{{ managed_user.username }}</strong>
           <span class="pill">{{ managed_user.role }}</span>
-          {% if managed_user.must_change_password %}<span class="pill">Password change required</span>{% elif managed_user.is_admin %}<span class="pill">Admin</span>{% else %}<span></span>{% endif %}
+          {% if not managed_user.is_active %}<span class="pill">Inactive</span>{% elif managed_user.must_change_password %}<span class="pill">Password change required</span>{% elif managed_user.is_admin %}<span class="pill">Admin</span>{% else %}<span></span>{% endif %}
           <form method="post" action="/admin/users/{{ managed_user.id }}/role/" class="inline-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <select name="role" aria-label="Role for {{ managed_user.username }}">
@@ -62,6 +62,11 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input name="password" type="password" minlength="10" placeholder="New password" autocomplete="new-password" required>
             <button type="submit">Reset</button>
+          </form>
+          <form method="post" action="/admin/users/{{ managed_user.id }}/active/" class="inline-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="is_active" value="{{ 'false' if managed_user.is_active else 'true' }}">
+            <button type="submit">{{ 'Deactivate' if managed_user.is_active else 'Reactivate' }}</button>
           </form>
         </div>
       {% else %}

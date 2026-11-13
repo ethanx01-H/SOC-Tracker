@@ -40,6 +40,21 @@ async def login(request: Request, username: Annotated[str, Form()], password: An
         return response
 
     user = db.scalar(select(User).where(User.username == username))
+    if user and not user.is_active:
+        # Deactivated accounts are refused before the password check, and are
+        # not counted toward the lockout: the account is already disabled.
+        db.add(AuditLog(
+            actor=None,
+            action="auth.login_inactive",
+            message=f"Rejected sign-in for deactivated account '{username}'.",
+            target_type="user",
+            target_id=username,
+            source_ip=source_ip,
+        ))
+        db.commit()
+        logger.warning("Sign-in attempt for deactivated account '%s' from %s", username, source_ip)
+        return render(request, "registration/login.html", {"error": "Invalid username or password."}, db)
+
     if not user or not verify_password(password, user.password_hash):
         record_failed_login(source_ip, username)
         db.add(AuditLog(
