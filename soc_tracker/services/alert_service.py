@@ -20,8 +20,13 @@ from ..models import Alert, AlertEvent, Evidence, User
 logger = logging.getLogger("soc_tracker.alert_service")
 
 
-def create_alert(db: Session, values: dict, user: User | None = None) -> Alert:
-    """Create a new alert with event logging."""
+def create_alert(db: Session, values: dict, user: User | None = None, *, source: str = "tracker", payload: dict | None = None) -> Alert:
+    """Add a new alert with its creation event to the session.
+
+    Flushes so the sequential ticket number can be derived from the primary key,
+    but does not commit: the caller owns the transaction, so a batch that fails
+    on its 50th record rolls back all of it instead of leaving 49 tickets behind.
+    """
     iocs = values.pop("iocs", None) or []
     if not isinstance(iocs, list) or len(iocs) > 500:
         raise ValueError("IOC list must contain at most 500 values.")
@@ -52,15 +57,16 @@ def create_alert(db: Session, values: dict, user: User | None = None) -> Alert:
         alert=alert,
         event_type="created",
         actor=actor,
-        message=f"{actor.username if actor else 'n8n'} created {alert.alert_id}."
+        message=f"{actor.username if actor else 'n8n'} created {alert.alert_id}.",
+        source=source,
+        payload_json=json.dumps(payload)[:100000] if payload is not None else "{}",
     ))
-    db.commit()
-    db.refresh(alert)
-    logger.info("Alert %s created by %s", alert.alert_id, actor.username if actor else "system")
+    db.flush()
+    logger.info("Alert %s staged by %s", alert.alert_id, actor.username if actor else "system")
     return alert
 
 
-def create_or_get_alert(db: Session, values: dict, user: User | None = None) -> tuple[Alert, bool]:
+def create_or_get_alert(db: Session, values: dict, user: User | None = None, *, source: str = "tracker", payload: dict | None = None) -> tuple[Alert, bool]:
     """Create an alert, or return the existing one for a repeated external id.
 
     n8n and Elastic retry on timeout, so without this a flaky webhook turns a
@@ -73,7 +79,7 @@ def create_or_get_alert(db: Session, values: dict, user: User | None = None) -> 
             logger.info("Duplicate external id %s maps to existing %s", external_id, existing.alert_id)
             return existing, False
     try:
-        return create_alert(db, dict(values), user), True
+        return create_alert(db, dict(values), user, source=source, payload=payload), True
     except IntegrityError:
         # Another worker won the race between the lookup and the insert.
         db.rollback()

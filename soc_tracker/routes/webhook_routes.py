@@ -82,23 +82,20 @@ async def n8n_webhook(request: Request, db: Session = Depends(get_db)):
     existing = []
     try:
         for record in records:
-            alert, is_new = create_or_get_alert(db, record_to_alert(record))
+            alert, is_new = create_or_get_alert(db, record_to_alert(record), source="n8n", payload=record)
             if is_new:
-                event = alert.events[0]
-                event.source = "n8n"
-                event.payload_json = json.dumps(record)[:100000]
-                db.commit()
                 created.append(alert)
             else:
                 existing.append(alert)
+        message = f"n8n created {len(created)} alert(s)."
+        if existing:
+            message += f" {len(existing)} duplicate(s) matched existing tickets."
+        db.add(AuditLog(action="webhook.alerts_created", target_type="alert_batch", target_id=str(len(created)), message=message, source_ip=client_ip(request)))
+        # One commit for the whole batch: a failure part-way leaves nothing behind.
+        db.commit()
     except (ValueError, TypeError) as error:
         db.rollback()
         return JSONResponse({"ok": False, "error": str(error)}, status_code=422)
-    message = f"n8n created {len(created)} alert(s)."
-    if existing:
-        message += f" {len(existing)} duplicate(s) matched existing tickets."
-    db.add(AuditLog(action="webhook.alerts_created", target_type="alert_batch", target_id=str(len(created)), message=message, source_ip=client_ip(request)))
-    db.commit()
     logger.info("n8n webhook created %d alerts, matched %d duplicates", len(created), len(existing))
     return {
         "ok": True,
