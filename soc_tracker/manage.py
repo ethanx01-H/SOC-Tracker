@@ -2,12 +2,17 @@
 
 import argparse
 import getpass
+import json
+from datetime import datetime
 
 from sqlalchemy import select
 
 from .auth import hash_password, validate_password_strength
-from .config import APP_ENV
+from .config import APP_ENV, RETENTION_DAYS
 from .models import Alert, AlertEvent, SessionLocal, User
+from .services import audit_export as audit_export_service
+from .services import backup_status as backup_status_service
+from .services import retention_service, sla_service
 from .services.alert_service import create_alert
 
 
@@ -98,17 +103,87 @@ def seed_demo() -> None:
     print(f"Created {len(samples)} synthetic demo tickets.")
 
 
+def run_retention(days: int, apply: bool) -> None:
+    """Archive tickets past the retention window; dry run unless --apply."""
+    with SessionLocal() as db:
+        summary = retention_service.archive(db, days=days, apply=apply)
+    print(json.dumps(summary, indent=2))
+    if not summary["alerts"]:
+        print(f"Nothing to archive: no closed tickets older than {days} days.")
+    elif not apply:
+        print("Dry run: nothing was written or deleted. Re-run with --apply to archive and remove.")
+
+
+def run_audit_export(start: str | None, end: str | None, out: str | None) -> None:
+    from pathlib import Path
+
+    window = {
+        "start": datetime.fromisoformat(start) if start else None,
+        "end": datetime.fromisoformat(end) if end else None,
+    }
+    with SessionLocal() as db:
+        result = audit_export_service.export(
+            db, window["start"], window["end"], directory=Path(out) if out else None
+        )
+    print(f"Wrote {result['records']} audit records to {result['path']}")
+    print(f"Manifest: {result['manifest']}")
+    print(f"Head hash: {result['head']}")
+    print("Record the head hash somewhere outside this host; it is what proves the export later.")
+
+
+def run_audit_verify(path: str) -> None:
+    result = audit_export_service.verify(path)
+    print(json.dumps(result, indent=2))
+    if not result["ok"]:
+        raise SystemExit("Verification FAILED: the export does not match its manifest.")
+
+
+def run_sla_sweep() -> None:
+    with SessionLocal() as db:
+        print(json.dumps(sla_service.sweep(db), indent=2))
+
+
+def run_backup_status() -> None:
+    print(json.dumps(backup_status_service.status(), indent=2))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     admin = commands.add_parser("create-admin", help="Create the first or another L3 administrator")
     admin.add_argument("username")
     commands.add_parser("seed-demo", help="Add five synthetic tickets for a local review environment")
+
+    retention = commands.add_parser("retention", help="Archive closed tickets past the retention window")
+    retention.add_argument("--days", type=int, default=RETENTION_DAYS, help=f"Retention window (default {RETENTION_DAYS})")
+    retention.add_argument("--apply", action="store_true", help="Write the archive and delete the rows (default is a dry run)")
+
+    export = commands.add_parser("audit-export", help="Write a hash-chained audit export")
+    export.add_argument("--from", dest="start", default=None, help="Start timestamp (ISO 8601, UTC)")
+    export.add_argument("--to", dest="end", default=None, help="End timestamp (ISO 8601, UTC)")
+    export.add_argument("--out", default=None, help="Directory for the export")
+
+    verify = commands.add_parser("audit-verify", help="Verify an audit export against its manifest")
+    verify.add_argument("path")
+
+    commands.add_parser("sla-sweep", help="Record newly missed SLAs and close resolved breaches")
+    commands.add_parser("backup-status", help="Report the newest data snapshot and its age")
+
     args = parser.parse_args()
     if args.command == "create-admin":
         create_admin(args.username.strip())
     elif args.command == "seed-demo":
         seed_demo()
+    elif args.command == "retention":
+        run_retention(args.days, args.apply)
+    elif args.command == "audit-export":
+        run_audit_export(args.start, args.end, args.out)
+    elif args.command == "audit-verify":
+        run_audit_verify(args.path)
+    elif args.command == "sla-sweep":
+        run_sla_sweep()
+    elif args.command == "backup-status":
+        run_backup_status()
 
 
 if __name__ == "__main__":

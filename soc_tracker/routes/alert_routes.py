@@ -1,13 +1,13 @@
 """Alert CRUD routes."""
 
 import logging
+from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from starlette.datastructures import UploadFile as FormUpload
 
 from ..auth import (
     can_create_alert,
@@ -22,6 +22,7 @@ from ..auth import (
 from ..dependencies import get_db
 from ..models import Alert, AlertEvent, Evidence, User
 from ..services.alert_service import (
+    RANGE_CHOICES,
     create_alert,
     export_csv,
     filtered_alerts,
@@ -29,8 +30,10 @@ from ..services.alert_service import (
     form_values,
     sla_status,
 )
+from ..services import merge_service, notify, sla_service
 from ..services.chart_service import chart_counts
 from ..services.evidence_service import EvidenceError, read_upload, store_evidence
+from ..config import PUBLIC_BASE_URL
 from ..utils import audit, redirect_to, render
 
 logger = logging.getLogger("soc_tracker.alert_routes")
@@ -39,7 +42,14 @@ router = APIRouter()
 
 
 @router.get("/", response_class=HTMLResponse)
-async def dashboard(request: Request, db: Session = Depends(get_db), user: User = Depends(require_user)):
+def dashboard(request: Request, db: Session = Depends(get_db), user: User = Depends(require_user)):
+    # Lazy SLA sweep: keeps breach history current without a scheduler. Idempotent,
+    # and a failure here must never break the dashboard.
+    try:
+        sla_service.sweep(db)
+    except Exception:
+        logger.exception("SLA sweep failed")
+        db.rollback()
     alerts = filtered_alerts(db, request)
     counts = {
         "total": len(alerts),
@@ -53,11 +63,15 @@ async def dashboard(request: Request, db: Session = Depends(get_db), user: User 
         "alerts": alerts[:80],
         "counts": counts,
         "charts": chart_counts(alerts),
+        "ranges": RANGE_CHOICES,
+        "active_range": (request.query_params.get("range") or "all").lower(),
+        "sla_summary": sla_service.summary(db),
+        "breaches": sla_service.recent(db, 8),
     }, db, user)
 
 
 @router.get("/alerts/", response_class=HTMLResponse)
-async def alert_list(request: Request, db: Session = Depends(get_db), user: User = Depends(require_user), page: int = 1):
+def alert_list(request: Request, db: Session = Depends(get_db), user: User = Depends(require_user), page: int = 1):
     pagination = filtered_alerts_paginated(db, request, page=page)
     return render(request, "alerts/list.html", {
         "alerts": pagination["alerts"],
@@ -68,7 +82,7 @@ async def alert_list(request: Request, db: Session = Depends(get_db), user: User
 
 
 @router.get("/alerts/mine/", response_class=HTMLResponse)
-async def my_alerts(request: Request, db: Session = Depends(get_db), user: User = Depends(require_user)):
+def my_alerts(request: Request, db: Session = Depends(get_db), user: User = Depends(require_user)):
     alerts = [
         a for a in filtered_alerts(db, request)
         if (a.assigned_to_id == user.id or a.analyst == user.username) and a.status != "Closed"
@@ -81,7 +95,7 @@ async def my_alerts(request: Request, db: Session = Depends(get_db), user: User 
 
 
 @router.get("/alerts/export.csv")
-async def alert_export(request: Request, db: Session = Depends(get_db), user: User = Depends(require_user)):
+def alert_export(request: Request, db: Session = Depends(get_db), user: User = Depends(require_user)):
     alerts = filtered_alerts(db, request)
     csv_content = export_csv(alerts)
     return Response(
@@ -92,25 +106,49 @@ async def alert_export(request: Request, db: Session = Depends(get_db), user: Us
 
 
 @router.get("/alerts/new/", response_class=HTMLResponse)
-async def alert_create_page(request: Request, db: Session = Depends(get_db), user: User = Depends(require_user)):
+def alert_create_page(request: Request, db: Session = Depends(get_db), user: User = Depends(require_user)):
     if not can_create_alert(user):
         raise HTTPException(status_code=403)
     return render(request, "alerts/form.html", {"title": "New alert", "alert": None, "form": {}}, db, user)
 
 
 @router.post("/alerts/new/")
-async def alert_create(request: Request, db: Session = Depends(get_db), user: User = Depends(require_user)):
+def alert_create(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+    title: Annotated[str, Form()] = "",
+    description: Annotated[str, Form()] = "",
+    source: Annotated[str, Form()] = "Manual",
+    severity: Annotated[str, Form()] = "Medium",
+    tactic: Annotated[str, Form()] = "Unknown",
+    asset: Annotated[str, Form()] = "Unknown",
+    iocs_text: Annotated[str, Form()] = "",
+    sla_hours: Annotated[str, Form()] = "8",
+    evidence_files: Annotated[list[UploadFile] | None, File()] = None,
+):
     if not can_create_alert(user):
         raise HTTPException(status_code=403)
-    form = await request.form()
-    uploads = [item for item in form.getlist("evidence_files") if isinstance(item, FormUpload) and item.filename]
+    # Declared as form parameters rather than request.form(): a sync handler
+    # cannot await the parse, and FastAPI already parsed multipart for us.
+    form = {
+        "title": title,
+        "description": description,
+        "source": source,
+        "severity": severity,
+        "tactic": tactic,
+        "asset": asset,
+        "iocs_text": iocs_text,
+        "sla_hours": sla_hours,
+    }
+    uploads = [item for item in (evidence_files or []) if item and item.filename]
     try:
         values = form_values(form)
         if not values["title"]:
             raise ValueError("Title is required.")
         # Read and validate every attachment before touching the database, so a
         # rejected file cannot leave a half-created ticket behind.
-        prepared = [await read_upload(upload) for upload in uploads]
+        prepared = [read_upload(upload) for upload in uploads]
     except (ValueError, EvidenceError) as error:
         return render(request, "alerts/form.html", {
             "title": "New alert", "alert": None, "form": form, "error": str(error)
@@ -134,11 +172,12 @@ async def alert_create(request: Request, db: Session = Depends(get_db), user: Us
         for path in written:
             path.unlink(missing_ok=True)
         raise
+    notify.notify(alert, "created", user.username, PUBLIC_BASE_URL)
     return redirect_to(alert.get_absolute_url(), f"Created {alert.alert_id}.")
 
 
 @router.get("/alerts/{pk}/", response_class=HTMLResponse)
-async def alert_detail(request: Request, pk: int, db: Session = Depends(get_db), user: User = Depends(require_user)):
+def alert_detail(request: Request, pk: int, db: Session = Depends(get_db), user: User = Depends(require_user)):
     alert = db.get(Alert, pk)
     if not alert:
         raise HTTPException(status_code=404)
@@ -154,11 +193,13 @@ async def alert_detail(request: Request, pk: int, db: Session = Depends(get_db),
         "can_assign": can_assign_alert(user),
         "assignable_users": assignable_users,
         "evidence": evidence,
+        "duplicates": merge_service.possible_duplicates(db, alert),
+        "can_merge": user_role(user) in {"L2", "L3"} and alert.status != "Closed",
     }, db, user)
 
 
 @router.get("/alerts/{pk}/edit/", response_class=HTMLResponse)
-async def alert_edit_page(request: Request, pk: int, db: Session = Depends(get_db), user: User = Depends(require_user)):
+def alert_edit_page(request: Request, pk: int, db: Session = Depends(get_db), user: User = Depends(require_user)):
     alert = db.get(Alert, pk)
     if not alert:
         raise HTTPException(status_code=404)
@@ -180,13 +221,35 @@ async def alert_edit_page(request: Request, pk: int, db: Session = Depends(get_d
 
 
 @router.post("/alerts/{pk}/edit/")
-async def alert_edit(request: Request, pk: int, db: Session = Depends(get_db), user: User = Depends(require_user)):
+def alert_edit(
+    request: Request,
+    pk: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+    title: Annotated[str, Form()] = "",
+    description: Annotated[str, Form()] = "",
+    source: Annotated[str, Form()] = "Manual",
+    severity: Annotated[str, Form()] = "Medium",
+    tactic: Annotated[str, Form()] = "Unknown",
+    asset: Annotated[str, Form()] = "Unknown",
+    iocs_text: Annotated[str, Form()] = "",
+    sla_hours: Annotated[str, Form()] = "8",
+):
     alert = db.get(Alert, pk)
     if not alert:
         raise HTTPException(status_code=404)
     if not can_edit_alert(user, alert):
         raise HTTPException(status_code=403)
-    form = dict(await request.form())
+    form = {
+        "title": title,
+        "description": description,
+        "source": source,
+        "severity": severity,
+        "tactic": tactic,
+        "asset": asset,
+        "iocs_text": iocs_text,
+        "sla_hours": sla_hours,
+    }
     try:
         values = form_values(form)
     except ValueError as e:
@@ -211,7 +274,7 @@ async def alert_edit(request: Request, pk: int, db: Session = Depends(get_db), u
 
 
 @router.post("/alerts/{pk}/escalate/")
-async def alert_escalate(request: Request, pk: int, db: Session = Depends(get_db), user: User = Depends(require_user)):
+def alert_escalate(request: Request, pk: int, db: Session = Depends(get_db), user: User = Depends(require_user)):
     alert = db.get(Alert, pk)
     if not alert:
         raise HTTPException(status_code=404)
@@ -226,11 +289,12 @@ async def alert_escalate(request: Request, pk: int, db: Session = Depends(get_db
     db.add(AlertEvent(alert=alert, event_type="escalated", actor=user, message=f"{user.username} escalated this alert."))
     audit(db, user, "alert.escalated", f"Escalated {alert.alert_id}.", "alert", alert.alert_id, request)
     db.commit()
+    notify.notify(alert, "escalate", user.username, PUBLIC_BASE_URL)
     return redirect_to(alert.get_absolute_url(), f"Escalated {alert.alert_id}.")
 
 
 @router.post("/alerts/{pk}/take/")
-async def alert_take(request: Request, pk: int, db: Session = Depends(get_db), user: User = Depends(require_user)):
+def alert_take(request: Request, pk: int, db: Session = Depends(get_db), user: User = Depends(require_user)):
     alert = db.get(Alert, pk)
     if not alert:
         raise HTTPException(status_code=404)
@@ -253,7 +317,7 @@ async def alert_take(request: Request, pk: int, db: Session = Depends(get_db), u
 
 
 @router.post("/alerts/{pk}/status/")
-async def alert_status_update(
+def alert_status_update(
     request: Request,
     pk: int,
     status: Annotated[str, Form()],
@@ -302,7 +366,13 @@ async def alert_status_update(
 
 
 @router.post("/alerts/{pk}/assign/")
-async def alert_assign(request: Request, pk: int, db: Session = Depends(get_db), user: User = Depends(require_user)):
+def alert_assign(
+    request: Request,
+    pk: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+    assigned_to: Annotated[str, Form()] = "",
+):
     alert = db.get(Alert, pk)
     if not alert:
         raise HTTPException(status_code=404)
@@ -311,33 +381,41 @@ async def alert_assign(request: Request, pk: int, db: Session = Depends(get_db),
         raise HTTPException(status_code=403)
     if alert.status == "Closed":
         raise HTTPException(status_code=409, detail="Closed tickets cannot be reassigned.")
-    form = dict(await request.form())
-    assigned_to = db.get(User, int(form.get("assigned_to") or 0))
-    if not assigned_to or assigned_to.role not in roles:
+    try:
+        target = db.get(User, int(assigned_to or 0))
+    except (TypeError, ValueError):
+        target = None
+    if not target or target.role not in roles:
         return redirect_to(alert.get_absolute_url(), "Select a valid analyst for your role.")
     previous_assignee = alert.assigned_to
-    alert.assigned_to = assigned_to
+    alert.assigned_to = target
     alert.assigned_by = user
-    alert.analyst = assigned_to.username
+    alert.analyst = target.username
     alert.status = "Pending"
     alert.updated_by = user
     db.add(AlertEvent(
         alert=alert, event_type="assigned", actor=user,
-        assigned_from=previous_assignee, assigned_to=assigned_to,
-        message=f"{user.username} assigned this alert to {assigned_to.username}."
+        assigned_from=previous_assignee, assigned_to=target,
+        message=f"{user.username} assigned this alert to {target.username}."
     ))
-    audit(db, user, "alert.assigned", f"Assigned {alert.alert_id} to {assigned_to.username}.", "alert", alert.alert_id, request)
+    audit(db, user, "alert.assigned", f"Assigned {alert.alert_id} to {target.username}.", "alert", alert.alert_id, request)
     db.commit()
-    return redirect_to(alert.get_absolute_url(), f"Assigned {alert.alert_id} to {assigned_to.username}.")
+    notify.notify(alert, "assign", user.username, PUBLIC_BASE_URL)
+    return redirect_to(alert.get_absolute_url(), f"Assigned {alert.alert_id} to {target.username}.")
 
 
 @router.post("/alerts/{pk}/notes/")
-async def alert_note(request: Request, pk: int, db: Session = Depends(get_db), user: User = Depends(require_user)):
+def alert_note(
+    request: Request,
+    pk: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+    note: Annotated[str, Form()] = "",
+):
     alert = db.get(Alert, pk)
     if not alert:
         raise HTTPException(status_code=404)
-    form = dict(await request.form())
-    note = form.get("note", "").strip()
+    note = note.strip()
     if not note:
         return redirect_to(alert.get_absolute_url(), "Note cannot be empty.")
     if len(note) > 10000:
@@ -350,7 +428,13 @@ async def alert_note(request: Request, pk: int, db: Session = Depends(get_db), u
 
 
 @router.post("/alerts/{pk}/close/")
-async def alert_close(request: Request, pk: int, db: Session = Depends(get_db), user: User = Depends(require_user)):
+def alert_close(
+    request: Request,
+    pk: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+    resolution_summary: Annotated[str, Form()] = "",
+):
     alert = db.get(Alert, pk)
     if not alert:
         raise HTTPException(status_code=404)
@@ -358,11 +442,11 @@ async def alert_close(request: Request, pk: int, db: Session = Depends(get_db), 
         raise HTTPException(status_code=403)
     if alert.status == "Closed":
         raise HTTPException(status_code=409, detail="Ticket is already closed.")
-    form = dict(await request.form())
-    summary = form.get("resolution_summary", "").strip()
+    summary = resolution_summary.strip()
     if not summary:
         return redirect_to(alert.get_absolute_url(), "Resolution summary is required.")
     alert.status = "Closed"
+    alert.closed_at = datetime.now(timezone.utc)
     alert.updated_by = user
     db.add(AlertEvent(alert=alert, event_type="closed", actor=user, message=f"Resolution: {summary}"))
     audit(db, user, "alert.closed", f"Closed {alert.alert_id}.", "alert", alert.alert_id, request)
@@ -371,7 +455,112 @@ async def alert_close(request: Request, pk: int, db: Session = Depends(get_db), 
 
 
 @router.post("/alerts/{pk}/delete/")
-async def alert_delete(request: Request, pk: int, db: Session = Depends(get_db), user: User = Depends(require_user)):
+def alert_delete(request: Request, pk: int, db: Session = Depends(get_db), user: User = Depends(require_user)):
     if not can_delete_alert(user):
         raise HTTPException(status_code=403)
     raise HTTPException(status_code=409, detail="Alert deletion is disabled to preserve incident and evidence history. Close the alert instead.")
+
+
+@router.post("/alerts/{pk}/merge/")
+def alert_merge(
+    request: Request,
+    pk: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+    target_alert_id: Annotated[str, Form()] = "",
+):
+    alert = db.get(Alert, pk)
+    if not alert:
+        raise HTTPException(status_code=404)
+    if user_role(user) not in {"L2", "L3"}:
+        raise HTTPException(status_code=403)
+    wanted = target_alert_id.strip().upper()
+    target = db.scalar(select(Alert).where(Alert.alert_id == wanted))
+    if not target:
+        return redirect_to(alert.get_absolute_url(), f"No ticket with the number {wanted or '(blank)'}.")
+    try:
+        result = merge_service.merge_alerts(db, alert, target, user)
+    except merge_service.MergeError as error:
+        return redirect_to(alert.get_absolute_url(), str(error))
+    audit(
+        db, user, "alert.merged",
+        f"Merged {result['source']} into {result['target']} "
+        f"({result['events']} event(s), {result['evidence']} evidence file(s)).",
+        "alert", result["target"], request,
+    )
+    db.commit()
+    return redirect_to(
+        target.get_absolute_url(),
+        f"Merged {result['source']} into {result['target']}.",
+    )
+
+
+@router.post("/alerts/bulk/")
+def alert_bulk(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+    ids: Annotated[list[str] | None, Form()] = None,
+    action: Annotated[str, Form()] = "",
+):
+    """Apply one action to several tickets at once.
+
+    Every ticket is checked individually: a bulk action must not quietly skip the
+    permission rules that a single-ticket action enforces.
+    """
+    selected: list[int] = []
+    for raw in ids or []:
+        try:
+            selected.append(int(raw))
+        except (TypeError, ValueError):
+            continue
+    if not selected:
+        return redirect_to("/alerts/", "Select at least one ticket first.")
+
+    alerts = list(db.scalars(select(Alert).where(Alert.id.in_(selected))))
+    changed = 0
+    skipped = 0
+    for alert in alerts:
+        if action == "assign_me":
+            if alert.status == "Closed" or not can_create_alert(user):
+                skipped += 1
+                continue
+            alert.assigned_to = user
+            alert.assigned_by = user
+            alert.analyst = user.username
+            if alert.status == "Open":
+                alert.status = "Pending"
+            alert.updated_by = user
+            db.add(AlertEvent(
+                alert=alert, event_type="assigned", actor=user, assigned_to=user,
+                message=f"{user.username} assigned this ticket to themselves (bulk action).",
+            ))
+            changed += 1
+        elif action.startswith("status:"):
+            wanted = action.split(":", 1)[1]
+            if wanted not in {"Open", "WIP", "Pending"} or alert.status == "Closed" or not can_edit_alert(user, alert):
+                skipped += 1
+                continue
+            previous = alert.status
+            alert.status = wanted
+            alert.updated_by = user
+            db.add(AlertEvent(
+                alert=alert, event_type="status",
+                message=f"{user.username} changed status from {previous} to {wanted} (bulk action).",
+            ))
+            changed += 1
+        else:
+            skipped += 1
+
+    if changed:
+        audit(
+            db, user, "alert.bulk_update",
+            f"Bulk action '{action}' updated {changed} ticket(s)"
+            + (f", skipped {skipped}." if skipped else "."),
+            "alert_batch", str(changed), request,
+        )
+        db.commit()
+    message = f"Updated {changed} ticket(s)."
+    if skipped:
+        message += f" {skipped} skipped (closed, or not permitted)."
+    return redirect_to("/alerts/", message)

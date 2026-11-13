@@ -20,6 +20,21 @@ from ..models import Alert, AlertEvent, Evidence, User
 
 logger = logging.getLogger("soc_tracker.alert_service")
 
+# Dashboard and list date windows. "all" (or no value) means no time filter.
+RANGE_WINDOWS = {
+    "24h": timedelta(hours=24),
+    "7d": timedelta(days=7),
+    "30d": timedelta(days=30),
+    "90d": timedelta(days=90),
+}
+RANGE_CHOICES = (
+    ("24h", "Last 24 hours"),
+    ("7d", "Last 7 days"),
+    ("30d", "Last 30 days"),
+    ("90d", "Last 90 days"),
+    ("all", "All time"),
+)
+
 
 def create_alert(db: Session, values: dict, user: User | None = None, *, source: str = "tracker", payload: dict | None = None) -> Alert:
     """Add a new alert with its creation event to the session.
@@ -123,6 +138,11 @@ def filtered_alerts(db: Session, request) -> list[Alert]:
     source = request.query_params.get("source") or ""
     analyst = request.query_params.get("analyst") or ""
     sla = request.query_params.get("sla") or ""
+    window = (request.query_params.get("range") or "").strip().lower()
+
+    if window in RANGE_WINDOWS:
+        cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - RANGE_WINDOWS[window]
+        query = query.where(Alert.created_at >= cutoff)
 
     if search:
         like = f"%{search}%"

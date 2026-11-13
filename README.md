@@ -139,9 +139,45 @@ is how databases get corrupted.
 
 ### Data storage and retention
 
-The local/demo app stores alert, account, event, and audit records in `data/fastapi.sqlite3` and evidence files in `data/evidence/`. In Docker, both are under `/app/data`, bind-mounted from `./data` on the host (see above). Alert deletion is disabled, and the app does not automatically expire records or evidence; this is persistence, not a guaranteed retention policy. Removing the host directory or losing the host can still destroy the data — the snapshots in `./backups` are the recovery point.
+The local/demo app stores alert, account, event, and audit records in `data/fastapi.sqlite3` and evidence files in `data/evidence/`. In Docker, both are under `/app/data`, bind-mounted from `./data` on the host (see above). Alert deletion is disabled; tickets leave the database only through the retention job below, which archives them first. Removing the host directory or losing the host can still destroy the data — the snapshots in `./backups` are the recovery point.
 
-The current SQLite setup is for a single-instance pilot and does not provide a production two-year retention guarantee. Before production, use a managed database with durable backups and a tested restore process, and durable evidence storage with a lifecycle/retention policy that keeps incident records and evidence for at least 730 days. Protect audit exports separately (ideally immutable storage), monitor backup/retention jobs, and verify restores. Keep database, evidence, and audit retention aligned; do not enable automatic deletion before the required retention period. Request limiting and login lockout are in process memory; keep one worker and use proxy-level limits unless a shared limiter is configured. Set `TRUSTED_PROXIES` to the addresses of your reverse proxy so lockouts, rate limits, and audit rows key on the real client address rather than the proxy.
+**Running on Postgres.** Set `DATABASE_URL` and the app uses it instead of SQLite — nothing else changes, and the same migrations run:
+
+```bash
+DATABASE_URL=postgresql://soc_tracker:password@db:5432/soc_tracker
+```
+
+Both `postgres://` and `postgresql://` are rewritten to `psycopg://` internally, so a URL copied from a DBA works unchanged. With Postgres you can also raise `WEB_CONCURRENCY` above 1, which SQLite cannot support: SQLite serialises writers across the whole file, so several workers on one file become lock waits rather than parallelism. The app logs a warning if it sees `WEB_CONCURRENCY>1` on SQLite.
+
+**Shared limiter counters.** Rate limits and login lockouts live in process memory by default, which is correct for one worker and wrong for several: each worker counts only its own traffic, so N workers allow N times the limit, and a lockout applies only to the worker that saw the failed attempt. Set `REDIS_URL` to share both counters across workers. Without Redis and without a shared store, keep `WEB_CONCURRENCY=1`.
+
+**Retention (730 days).** `python -m soc_tracker.manage retention` prints what would be archived; add `--apply` to actually do it:
+
+```bash
+python -m soc_tracker.manage retention --days 730           # dry run, changes nothing
+python -m soc_tracker.manage retention --days 730 --apply   # archive, then remove
+```
+
+Only *closed* tickets are eligible, and the clock starts at closure — a ticket opened three years ago and closed last week keeps its full window. The job writes a gzipped JSON Lines archive (ticket, timeline, evidence metadata with SHA-256, SLA breaches) into `data/archive/`, reads it back to prove it opens and holds the expected number of tickets, and only then deletes rows and evidence files. One audit row records the batch. Nothing is deleted if the archive cannot be verified.
+
+**Immutable audit export.** The audit trail is hash-chained on export: each record carries the hash of the one before it, so a deleted or edited row breaks the chain and verification names the record.
+
+```bash
+python -m soc_tracker.manage audit-export                 # all records
+python -m soc_tracker.manage audit-export --from 2026-01-01 --to 2026-04-01
+python -m soc_tracker.manage audit-verify data/audit-exports/audit-20260401T000000Z.jsonl
+```
+
+Exports are written read-only with a manifest holding the head hash. Copy the head hash somewhere off this host (a change ticket, an external log): that anchor is what proves later that the export was not rewritten. Read-only is not immutable — for the bank's requirement, land the export in object-lock or WORM storage.
+
+**Monitoring.** `/healthz` reports database health and the age of the newest snapshot, and answers `degraded` when the snapshot is older than `BACKUP_MAX_AGE_HOURS` (default 36) without failing the check — restarting the app would not fix a dead backup job. `/metrics` serves Prometheus text: request counts and latency, tickets by status and severity, unassigned backlog, SLA breaches, evidence volume, audit row count, backup age and staleness, and which limiter store is in use. Without `METRICS_TOKEN` it answers on loopback only; with a token it requires `Authorization: Bearer <token>`.
+
+```bash
+python -m soc_tracker.manage backup-status   # newest snapshot and its age
+python -m soc_tracker.manage sla-sweep       # record newly missed SLAs
+```
+
+Schedule retention, the audit export and the SLA sweep from cron (or Windows Task Scheduler), and alert on `soc_backup_stale`, `soc_backup_age_seconds` and `soc_sla_breaches{state="open"}`. Set `TRUSTED_PROXIES` to the addresses of your reverse proxy so lockouts, rate limits, and audit rows key on the real client address rather than the proxy.
 
 ## Screenshots
 
@@ -178,6 +214,11 @@ Create users, manage roles (L1/L2/L3), and reset passwords.
 - L1, L2, and L3 users can assign unassigned Open tickets to themselves
 - Optional IOCs when creating tickets; close summaries have no application-level word-count limit
 - Filter by severity, status, search terms; CSV export of filtered results
+- Dashboard date ranges (24 hours, 7, 30, 90 days, all time) applied to the counts, charts and queue
+- Bulk actions on the queue: assign selected tickets to yourself, or move them to WIP/Pending/Open
+- Duplicate handling: tickets filed within 24 hours with the same title or asset are listed on the ticket, and L2/L3 can merge one into another — the timeline and evidence move to the surviving ticket, and the duplicate closes pointing at it
+- SLA breach history: a sweep records each missed due date and, on closure, how late the ticket actually was; the dashboard shows the totals
+- Notifications by email and Microsoft Teams on new high-severity tickets, assignment and escalation — each channel stays inert until it is configured
 - Evidence is attached when the ticket is created; there is no later upload, so a ticket's evidence is exactly what the analyst filed with it
 - Every file is stored with its SHA-256 recorded; PNG and JPEG appear as small thumbnails (four per row) that open a full-size popup, everything else is listed as a normal row that downloads
 - Evidence uploads accept `.xlsx`, `.csv`, `.jpg`, `.jpeg`, `.png`, `.txt`, `.log`, `.json`, `.pdf`, `.pcap`, `.pcapng`, up to 6 MB each; a rejected file cancels the whole create, so no half-made ticket is left behind
@@ -259,6 +300,15 @@ All settings are controlled via environment variables. See `.env.example` for th
 | `LOGIN_LOCKOUT_SECONDS`  | No       | `300`                  | Lockout duration in seconds              |
 | `TRUSTED_PROXIES`        | No       | `127.0.0.1/32,::1/128` | Peers allowed to set `X-Forwarded-For`   |
 | `DISPLAY_TIMEZONE`       | No       | `Asia/Yangon`          | Zone used to render stored UTC times     |
+| `DATABASE_URL`           | No       | SQLite file            | Postgres URL; switches the whole app     |
+| `WEB_CONCURRENCY`        | No       | `1`                    | Workers; above 1 needs Postgres          |
+| `REDIS_URL`              | No       | unset                  | Shared limiter and lockout counters      |
+| `RETENTION_DAYS`         | No       | `730`                  | Archive window for closed tickets        |
+| `METRICS_TOKEN`          | No       | unset                  | Bearer token for `/metrics`              |
+| `BACKUP_MAX_AGE_HOURS`   | No       | `36`                   | Snapshot age that marks `/healthz` stale |
+| `SMTP_HOST`              | No       | unset                  | Email notifications                      |
+| `NOTIFY_EMAIL_TO`        | No       | unset                  | Comma-separated recipients               |
+| `NOTIFY_TEAMS_WEBHOOK`   | No       | unset                  | Teams incoming webhook                   |
 
 `TRUSTED_PROXIES` matters behind nginx or a Docker port mapping: the app resolves
 the client address from `X-Forwarded-For` only when the direct peer is in this
@@ -307,16 +357,29 @@ Test coverage includes:
 - Elastic/Kibana JSON parser (43 tests)
 - Authentication and RBAC permissions (41 tests)
 - Alert service business logic (19 tests)
+- Retention archival and audit-export chain verification
+- SLA breach history, backup freshness, and the metrics endpoint
+- Limiter counters in memory and through Redis (`fakeredis`), including the Redis-outage fallback
+- A guard that no request handler is declared `async def`, so blocking database and PBKDF2 work stays off the event loop
+
+The suite runs on SQLite in-memory. The Postgres path has its own module:
+
+```bash
+TEST_DATABASE_URL=postgresql://user:pass@host/scratch_db pytest tests/test_postgres.py
+```
+
+It drops and recreates the `public` schema, runs the real migrations to head, and drives a ticket round trip, a close with audit rows, and webhook deduplication. Point it at a scratch database only.
 
 ## Future improvements
 
 - ~~Automated tests for alert workflows, role permissions, imports, and webhooks~~ ✅ Done
-- Dashboard date-range filters and trend charts for weekly/monthly reporting
-- Richer SLA tracking with due dates, owner notifications, and breach history
-- Evidence management improvements (tagging, retention)
-- External integrations for SIEM enrichment, ticket export, and notifications
-- Deployment docs for HTTPS, reverse proxy, and backups
+- ~~Dashboard date-range filters~~ ✅ Done (trend charts still open)
+- ~~SLA tracking with breach history~~ ✅ Done
+- ~~External integrations for notifications~~ ✅ Done (email and Teams)
+- Trend charts for weekly and monthly reporting
+- Evidence tagging and per-evidence retention
 - API documentation page with example payloads for n8n and Elastic imports
+- OpenTelemetry traces for slow dashboard queries at scale
 
 ## Contributing
 

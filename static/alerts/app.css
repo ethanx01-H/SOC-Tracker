@@ -238,10 +238,67 @@ p {
 
 .table-row {
   display: grid;
-  grid-template-columns: 120px minmax(220px, 1fr) 100px 120px 120px 120px 120px;
+  grid-template-columns: 24px 120px minmax(220px, 1fr) 100px 120px 120px 120px 120px;
   gap: 12px;
   align-items: center;
   padding: 12px;
+}
+
+.row-check {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--primary);
+}
+
+.bulk-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bulk-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-strong);
+  font-size: 0.9rem;
+}
+
+.bulk-toolbar label {
+  font-weight: 700;
+}
+
+.range-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.range-pill {
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.range-pill.active {
+  border-color: var(--primary);
+  color: var(--text);
+  background: var(--panel-strong);
+}
+
+.metric-grid.compact {
+  margin-bottom: 12px;
 }
 
 .admin-grid {
@@ -674,4 +731,17 @@ body.lightbox-open {
   .evidence-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+.banner {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--primary);
+  border-radius: 8px;
+  background: var(--panel-strong);
+  font-size: 0.9rem;
+}
+
+.banner a {
+  font-weight: 700;
 }

@@ -6,6 +6,14 @@ services:
     environment:
       APP_ENV: ${APP_ENV:-review}
       SQLITE_PATH: /app/data/fastapi.sqlite3
+      # Empty DATABASE_URL keeps SQLite. To run on Postgres, start the stack with
+      #   docker compose --profile postgres up -d
+      # and set DATABASE_URL in .env to postgresql://soc_tracker:<password>@postgres:5432/soc_tracker
+      DATABASE_URL: ${DATABASE_URL:-}
+      # Shared limiter counters. Set REDIS_URL=redis://redis:6379/0 and start with
+      # --profile redis when WEB_CONCURRENCY is greater than 1.
+      REDIS_URL: ${REDIS_URL:-}
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-1}
       COOKIE_SECURE: ${COOKIE_SECURE:-0}
       # The host proxy reaches the container over the Docker bridge, so the
       # container sees it as a private 172.x address. If your Docker network uses
@@ -29,3 +37,31 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+
+  # Optional: docker compose --profile postgres up -d
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["postgres"]
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-soc_tracker}
+      POSTGRES_USER: ${POSTGRES_USER:-soc_tracker}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-before-use}
+    volumes:
+      # A host directory again, so `docker compose down -v` cannot delete the
+      # database. Back it up like any other Postgres server.
+      - ${SOC_PGDATA_DIR:-./pgdata}:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-soc_tracker} -d ${POSTGRES_DB:-soc_tracker}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Optional: docker compose --profile redis up -d
+  redis:
+    image: redis:7-alpine
+    profiles: ["redis"]
+    # Counters are ephemeral by design: losing them costs one window of rate
+    # limiting, not any ticket data, so persistence is off.
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    restart: unless-stopped

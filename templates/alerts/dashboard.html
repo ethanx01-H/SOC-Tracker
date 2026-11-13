@@ -7,6 +7,11 @@
   </div>
   {% if can_create_alert %}<a class="button primary" href="/alerts/new/">New alert</a>{% endif %}
 </header>
+<nav class="range-nav" aria-label="Date range">
+  {% for value, label in ranges %}
+    <a class="range-pill{% if active_range == value %} active{% endif %}" href="?range={{ value }}">{{ label }}</a>
+  {% endfor %}
+</nav>
 <section class="metric-grid">
   <div class="metric"><strong>{{ counts.total }}</strong><span>Total alerts</span></div>
   <div class="metric"><strong>{{ counts.open }}</strong><span>Open</span></div>
@@ -47,6 +52,37 @@
       {% endif %}
     </div>
   {% endfor %}
+</section>
+<section class="panel">
+  <h2>SLA breaches <span class="muted">· recorded history</span></h2>
+  <div class="metric-grid compact">
+    <div class="metric"><strong>{{ sla_summary.total }}</strong><span>Total breaches</span></div>
+    <div class="metric"><strong>{{ sla_summary.open }}</strong><span>Still open</span></div>
+    <div class="metric"><strong>{{ sla_summary.closed }}</strong><span>Resolved</span></div>
+    <div class="metric"><strong>{{ sla_summary.average_late_hours }}h</strong><span>Average late</span></div>
+  </div>
+  {% if breaches %}
+    <div class="timeline">
+      {% for breach in breaches %}
+        <article class="timeline-item">
+          <div>
+            <strong>{{ breach.alert_ref }}</strong>
+            <span class="muted">due {{ breach.due_at|localdt }}</span>
+          </div>
+          <p>
+            {{ breach.severity }}
+            {% if breach.resolved_at %}
+              · closed {{ breach.late_hours }}h late
+            {% else %}
+              · still open
+            {% endif %}
+          </p>
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty">No SLA breaches recorded</div>
+  {% endif %}
 </section>
 <section class="panel">
   <h2>Recent alerts</h2>

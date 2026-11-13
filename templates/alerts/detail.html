@@ -20,6 +20,12 @@
   </div>
   <p class="eyebrow">Alert detail</p>
   <h1>{{ alert.alert_id }} {{ alert.title }}</h1>
+  {% if alert.duplicate_of %}
+    <p class="banner">
+      Merged into <a href="{{ alert.duplicate_of.get_absolute_url() }}">{{ alert.duplicate_of.alert_id }}</a> —
+      the investigation continues there.
+    </p>
+  {% endif %}
   <div class="pill-row">
     <span class="pill severity-{{ alert.severity }}">{{ alert.severity }}</span>
     {% if alert.status != "Closed" and can_edit %}
@@ -150,6 +156,29 @@
       </div>
     </form>
   </section>
+  {% if duplicates or can_merge %}
+    <section class="assign-panel">
+      <h2>Duplicates</h2>
+      {% if duplicates %}
+        <p class="muted">Filed within 24 hours with the same title or asset:</p>
+        <div class="pill-row">
+          {% for other in duplicates %}
+            <a class="pill" href="{{ other.get_absolute_url() }}">{{ other.alert_id }} · {{ other.title }}</a>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="muted">No tickets with the same title or asset in the last 24 hours.</p>
+      {% endif %}
+      {% if can_merge %}
+        <form method="post" action="/alerts/{{ alert.pk }}/merge/" class="inline-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input name="target_alert_id" placeholder="Keep ticket, e.g. {{ alert.alert_id }}" required>
+          <button class="primary" type="submit">Merge this into it</button>
+        </form>
+        <p class="muted">This ticket's timeline and evidence move to the target, and this one closes pointing at it.</p>
+      {% endif %}
+    </section>
+  {% endif %}
   <section>
     <h2>Activity log <span class="muted">· {{ display_timezone }}</span></h2>
     <div class="timeline">
