@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from ..models import Alert, AlertEvent, Evidence, User
 
-logger = logging.getLogger("soc_tracker.merge")
+logger = logging.getLogger("sentriq.merge")
 
 
 class MergeError(Exception):

@@ -6,7 +6,7 @@ import fakeredis
 import pytest
 import redis
 
-from soc_tracker import limiter
+from sentriq import limiter
 
 
 @pytest.fixture

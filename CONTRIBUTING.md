@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping improve SOC Alert Tracker.
+Thanks for helping improve Sentriq.
 
 ## How to contribute
 

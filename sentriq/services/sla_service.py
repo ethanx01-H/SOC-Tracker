@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from ..models import Alert, SlaBreach
 
-logger = logging.getLogger("soc_tracker.sla")
+logger = logging.getLogger("sentriq.sla")
 
 # How often a page load may trigger a sweep. The dashboard calls this on every
 # load, so without a floor the same scan ran for every analyst, every refresh.

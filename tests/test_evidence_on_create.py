@@ -5,10 +5,10 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from soc_tracker import models
-from soc_tracker.auth import hash_password
-from soc_tracker.models import Alert, AlertEvent, AuditLog, Evidence, User
-from soc_tracker.services import evidence_service
+from sentriq import models
+from sentriq.auth import hash_password
+from sentriq.models import Alert, AlertEvent, AuditLog, Evidence, User
+from sentriq.services import evidence_service
 
 from tests.support import make_session_factory
 

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Snapshot a Postgres-backed SOC Tracker database with pg_dump.
+# Snapshot a Postgres-backed Sentriq database with pg_dump.
 #
 # Usage: backup-postgres.sh [backup-dir] [keep] [min-interval-seconds]
 #

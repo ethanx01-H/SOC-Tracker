@@ -13,7 +13,7 @@ from pathlib import Path
 
 from ..config import BACKUP_DIR, BACKUP_MAX_AGE_HOURS
 
-logger = logging.getLogger("soc_tracker.backup")
+logger = logging.getLogger("sentriq.backup")
 
 
 def snapshots(directory: Path | None = None) -> list[Path]:

@@ -16,7 +16,7 @@ from ..models import AuditLog, User
 from ..net import client_ip
 from ..utils import audit, flash, redirect_to, render
 
-logger = logging.getLogger("soc_tracker.auth_routes")
+logger = logging.getLogger("sentriq.auth_routes")
 
 router = APIRouter()
 

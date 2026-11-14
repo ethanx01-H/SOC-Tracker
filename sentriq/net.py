@@ -13,7 +13,7 @@ from fastapi import Request
 
 from .config import TRUSTED_PROXIES
 
-logger = logging.getLogger("soc_tracker.net")
+logger = logging.getLogger("sentriq.net")
 
 
 def _network(entry: str):

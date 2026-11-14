@@ -3,12 +3,12 @@
 import pytest
 
 # Imported first on purpose: it starts the test Postgres and sets DATABASE_URL,
-# which soc_tracker.config requires before it will import.
+# which sentriq.config requires before it will import.
 from tests.support import make_engine, make_session_factory
 
-from soc_tracker import middleware
-from soc_tracker.auth import hash_password
-from soc_tracker.models import User
+from sentriq import middleware
+from sentriq.auth import hash_password
+from sentriq.models import User
 
 
 @pytest.fixture(autouse=True)
@@ -26,8 +26,8 @@ def isolate_evidence_dir(tmp_path, monkeypatch):
     The upload route writes to config.UPLOAD_DIR, which in Docker is the same
     bind-mounted folder the team uses for real evidence.
     """
-    from soc_tracker.routes import evidence_routes
-    from soc_tracker.services import evidence_service
+    from sentriq.routes import evidence_routes
+    from sentriq.services import evidence_service
 
     monkeypatch.setattr(evidence_routes, "UPLOAD_DIR", tmp_path)
     monkeypatch.setattr(evidence_service, "UPLOAD_DIR", tmp_path)

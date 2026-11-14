@@ -8,12 +8,11 @@ from datetime import datetime
 from sqlalchemy import select
 
 from .auth import hash_password, validate_password_strength
-from .config import APP_ENV, DATABASE_URL, RETENTION_DAYS
+from .config import APP_ENV, RETENTION_DAYS
 from .models import Alert, AlertEvent, SessionLocal, User
 from .services import audit_export as audit_export_service
 from .services import backup_status as backup_status_service
 from .services import retention_service, sla_service
-from .services.sqlite_import import import_sqlite
 from .services.alert_service import create_alert
 
 
@@ -148,13 +147,6 @@ def run_backup_status() -> None:
     print(json.dumps(backup_status_service.status(), indent=2))
 
 
-def run_import_sqlite(path: str) -> None:
-    """Move a pre-Postgres database across, once."""
-    counts = import_sqlite(path, DATABASE_URL)
-    print(f"Imported {counts.get('fastapi_alerts', 0)} tickets and "
-          f"{counts.get('fastapi_users', 0)} accounts into Postgres.")
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -176,8 +168,6 @@ def main() -> None:
 
     commands.add_parser("sla-sweep", help="Record newly missed SLAs and close resolved breaches")
     commands.add_parser("backup-status", help="Report the newest data snapshot and its age")
-    importer = commands.add_parser("import-sqlite", help="Copy a SQLite database into the configured Postgres")
-    importer.add_argument("path")
 
     args = parser.parse_args()
     if args.command == "create-admin":
@@ -194,8 +184,6 @@ def main() -> None:
         run_sla_sweep()
     elif args.command == "backup-status":
         run_backup_status()
-    elif args.command == "import-sqlite":
-        run_import_sqlite(args.path)
 
 
 if __name__ == "__main__":

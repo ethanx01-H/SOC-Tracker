@@ -4,7 +4,7 @@ from datetime import timedelta
 
 import pytest
 
-from soc_tracker.services import sla_service
+from sentriq.services import sla_service
 
 from tests.test_query_scaling import boundary_tickets, make_alert, utcnow  # noqa: F401
 

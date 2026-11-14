@@ -12,8 +12,8 @@ import json
 import pytest
 
 from alerts.elastic import parse_elastic_alerts
-from soc_tracker.models import Alert
-from soc_tracker.services.alert_service import create_or_get_alert
+from sentriq.models import Alert
+from sentriq.services.alert_service import create_or_get_alert
 from tests.support import make_session_factory
 
 

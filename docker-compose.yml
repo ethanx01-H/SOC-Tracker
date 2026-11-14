@@ -1,14 +1,14 @@
 services:
-  soc-alert-tracker:
+  sentriq:
     build: .
-    image: soc-alert-tracker:local
+    image: sentriq:local
     env_file: .env
     environment:
       APP_ENV: ${APP_ENV:-review}
       # Postgres only: the app refuses to start without a Postgres URL. If you
       # change POSTGRES_PASSWORD, set DATABASE_URL to match - keep the password
       # out of this file rather than nesting interpolation here.
-      DATABASE_URL: ${DATABASE_URL:-postgresql://soc_tracker:change-me-before-use@postgres:5432/soc_tracker}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://sentriq:change-me-before-use@postgres:5432/sentriq}
       # Shared limiter counters. Set REDIS_URL=redis://redis:6379/0 and start with
       # --profile redis when WEB_CONCURRENCY is greater than 1.
       REDIS_URL: ${REDIS_URL:-}
@@ -29,7 +29,7 @@ services:
       # `docker system prune --volumes` only ever remove Docker-managed volumes,
       # so none of them can delete the team's alerts or evidence.
       - ./data:/app/data
-      - ${SOC_BACKUP_DIR:-./backups}:/app/backups
+      - ${SENTRIQ_BACKUP_DIR:-./backups}:/app/backups
     restart: unless-stopped
     depends_on:
       postgres:
@@ -43,16 +43,16 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-soc_tracker}
-      POSTGRES_USER: ${POSTGRES_USER:-soc_tracker}
+      POSTGRES_DB: ${POSTGRES_DB:-sentriq}
+      POSTGRES_USER: ${POSTGRES_USER:-sentriq}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-before-use}
     volumes:
       # A host directory again, so `docker compose down -v` cannot delete the
       # database. Back it up like any other Postgres server.
-      - ${SOC_PGDATA_DIR:-./pgdata}:/var/lib/postgresql/data
+      - ${SENTRIQ_PGDATA_DIR:-./pgdata}:/var/lib/postgresql/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-soc_tracker} -d ${POSTGRES_DB:-soc_tracker}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sentriq} -d ${POSTGRES_DB:-sentriq}"]
       interval: 10s
       timeout: 5s
       retries: 5

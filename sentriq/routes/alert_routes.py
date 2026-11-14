@@ -38,7 +38,7 @@ from ..services.evidence_service import EvidenceError, read_upload, store_eviden
 from ..config import PUBLIC_BASE_URL
 from ..utils import audit, is_local_path, is_partial_request, page_url, redirect_to, render
 
-logger = logging.getLogger("soc_tracker.alert_routes")
+logger = logging.getLogger("sentriq.alert_routes")
 
 router = APIRouter()
 

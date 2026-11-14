@@ -1,6 +1,6 @@
 """Database URL handling, kept separate so it can be read without a database.
 
-``soc_tracker.config`` refuses to import without a Postgres URL, which is the
+``sentriq.config`` refuses to import without a Postgres URL, which is the
 point, but tooling still needs to normalise a URL before the app is configured.
 """
 

@@ -10,14 +10,14 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from soc_tracker.models import Alert
-from soc_tracker.services.alert_service import (
+from sentriq.models import Alert
+from sentriq.services.alert_service import (
     alert_query,
     dashboard_counts,
     filtered_alerts_paginated,
     sla_status,
 )
-from soc_tracker.services.chart_service import chart_counts, chart_counts_for_query
+from sentriq.services.chart_service import chart_counts, chart_counts_for_query
 
 
 def utcnow():
@@ -127,7 +127,7 @@ def test_the_sla_deadline_is_postgres_sql():
     from sqlalchemy.dialects import postgresql, sqlite
     from sqlalchemy.exc import CompileError
 
-    from soc_tracker.services.alert_service import _sla_due_sql
+    from sentriq.services.alert_service import _sla_due_sql
 
     statement = select(_sla_due_sql(Alert.created_at, Alert.sla_hours))
     postgres_sql = str(statement.compile(dialect=postgresql.dialect()))

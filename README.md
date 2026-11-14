@@ -1,4 +1,4 @@
-# SOC Alert Tracker
+# Sentriq
 
 ![Python](https://img.shields.io/badge/Python-3.12-blue?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)
@@ -28,13 +28,13 @@ Set `APP_SECRET_KEY` in `.env` to a random value of at least 32 characters, then
 On first startup, database migrations run automatically. In another terminal, create the first administrator:
 
 ```bash
-.venv/bin/python -m soc_tracker.manage create-admin admin_l3
+.venv/bin/python -m sentriq.manage create-admin admin_l3
 ```
 
 The command prompts you to choose a password. Open `http://127.0.0.1:8080` and sign in as `admin_l3`. A fresh install has no default users or demo tickets; create L1/L2 users from the Users page, then optionally seed synthetic review tickets:
 
 ```bash
-.venv/bin/python -m soc_tracker.manage seed-demo
+.venv/bin/python -m sentriq.manage seed-demo
 ```
 
 The seed command is disabled when `APP_ENV=production`. New users have **Require password change at next login** enabled by default; the admin can turn it off in the create-user form. Any signed-in user can later change their own password from **Change password** in the sidebar. Stop the server with `Ctrl+C`.
@@ -64,7 +64,7 @@ pip install -r requirements-dev.txt   # adds pgserver, a bundled Postgres
 ```
 
 It prints the URL and the review accounts when it is ready, and everything it
-creates lives in `~/.local/share/soc-tracker-demo` (override with
+creates lives in `~/.local/share/sentriq-demo` (override with
 `DEMO_STATE_DIR`), so stopping and starting keeps the tickets. The Postgres
 there is a development bundle, not a server to run in production; it is only
 there so the demo exercises the same SQL as production. Postgres refuses to
@@ -74,8 +74,8 @@ is why the state directory is outside the repository.
 ## Quick start (Docker)
 
 ```bash
-git clone https://github.com/ethanx01-H/SOC-Tracker.git
-cd SOC-Tracker
+git clone https://github.com/ethanx01-H/Sentriq.git
+cd Sentriq
 cp .env.example .env
 # Replace APP_SECRET_KEY with a random 32-byte secret.
 docker compose up --build
@@ -84,10 +84,10 @@ docker compose up --build
 The review deployment listens on `http://127.0.0.1:8080` and creates no default users or sample incidents. Create the first administrator in a second terminal:
 
 ```bash
-docker compose exec soc-alert-tracker python -m soc_tracker.manage create-admin admin_l3
+docker compose exec sentriq python -m sentriq.manage create-admin admin_l3
 ```
 
-The command prompts for the password twice. Create L1/L2 users from the administrator page and optionally add five synthetic review tickets with `docker compose exec soc-alert-tracker python -m soc_tracker.manage seed-demo`. The seed command refuses to run in production. New users are required to change their password by default; the admin can disable this when creating the account. Each user can change their own password from the **Change password** link in the sidebar.
+The command prompts for the password twice. Create L1/L2 users from the administrator page and optionally add five synthetic review tickets with `docker compose exec sentriq python -m sentriq.manage seed-demo`. The seed command refuses to run in production. New users are required to change their password by default; the admin can disable this when creating the account. Each user can change their own password from the **Change password** link in the sidebar.
 
 This compose setup binds to localhost for review and defaults to non-secure cookies so it works over local HTTP. For production, set `APP_ENV=production` and `COOKIE_SECURE=1`, put the app behind HTTPS, and restrict access to the proxy/network. Do not expose port 8080 directly to the internet. [nginx.conf](nginx.conf) is an example HTTPS reverse proxy configuration; update its hostname and certificate paths before enabling it.
 
@@ -96,8 +96,8 @@ This compose setup binds to localhost for review and defaults to non-secure cook
 The compose file bind-mounts host directories instead of using Docker volumes:
 
 - `./data` → `/app/data` — uploaded `evidence/`
-- `./pgdata` → the Postgres data directory (override with `SOC_PGDATA_DIR`)
-- `./backups` → `/app/backups` — `pg_dump` snapshots (override with `SOC_BACKUP_DIR`)
+- `./pgdata` → the Postgres data directory (override with `SENTRIQ_PGDATA_DIR`)
+- `./backups` → `/app/backups` — `pg_dump` snapshots (override with `SENTRIQ_BACKUP_DIR`)
 
 Because those are host directories, `docker compose down -v`, `docker volume rm`,
 `docker volume prune` and `docker system prune --volumes` cannot delete the alerts or the
@@ -110,21 +110,21 @@ checks the result with `pg_restore --list`, and only then renames it into place,
 dump never looks like a usable snapshot. To restore one into a fresh database:
 
 ```bash
-docker compose exec -T postgres createdb -U soc_tracker soc_tracker_restore
-pg_restore --no-owner --no-privileges -d "postgresql://soc_tracker:***@localhost:5432/soc_tracker_restore" backups/soc-pg-YYYYmmdd-HHMMSS.dump
+docker compose exec -T postgres createdb -U sentriq sentriq_restore
+pg_restore --no-owner --no-privileges -d "postgresql://sentriq:***@localhost:5432/sentriq_restore" backups/soc-pg-YYYYmmdd-HHMMSS.dump
 ```
 
 For a nightly snapshot while the stack is running, use the host scheduler. Linux or WSL
 (`crontab -e`), 02:00 daily, keep 30, no minimum interval:
 
 ```cron
-0 2 * * * cd /path/to/SOC-Tracker && docker compose exec -T soc-alert-tracker sh scripts/backup-postgres.sh /app/backups 30 0 >> /var/log/soc-tracker-backup.log 2>&1
+0 2 * * * cd /path/to/Sentriq && docker compose exec -T sentriq sh scripts/backup-postgres.sh /app/backups 30 0 >> /var/log/sentriq-backup.log 2>&1
 ```
 
 On Windows, create a daily Task Scheduler job that runs:
 
 ```powershell
-powershell -Command "cd D:\IT\automation_script\SOC-Tracker; docker compose exec -T soc-alert-tracker sh scripts/backup-postgres.sh /app/backups 30 0"
+powershell -Command "cd D:\IT\automation_script\Sentriq; docker compose exec -T sentriq sh scripts/backup-postgres.sh /app/backups 30 0"
 ```
 
 Test the restore path, not just the backup: restore a snapshot into a scratch database at
@@ -141,17 +141,17 @@ Moving data out of the old named volume, only if you ran an earlier compose file
 
 ```powershell
 docker compose down
-docker run --rm -v soc-tracker_soc_tracker_data:/from -v "${PWD}\data:/to" alpine sh -c "cp -a /from/. /to/"
+docker run --rm -v sentriq_sentriq_data:/from -v "${PWD}\data:/to" alpine sh -c "cp -a /from/. /to/"
 docker compose up -d --build
 ```
 
 ```bash
 # same thing from WSL or Linux
-docker run --rm -v soc-tracker_soc_tracker_data:/from -v "$PWD/data:/to" alpine sh -c "cp -a /from/. /to/"
+docker run --rm -v sentriq_sentriq_data:/from -v "$PWD/data:/to" alpine sh -c "cp -a /from/. /to/"
 ```
 
 Confirm the tickets are there, then remove the old volume with `docker volume rm
-soc-tracker_soc_tracker_data`. On a Linux host the container runs as uid 1000, so make the
+sentriq_sentriq_data`. On a Linux host the container runs as uid 1000, so make the
 directory writable: `chown -R 1000:1000 data backups`.
 
 ### Data storage and retention
@@ -164,16 +164,16 @@ and `postgresql://` are rewritten to `psycopg://` internally, so a URL copied fr
 a DBA works unchanged:
 
 ```bash
-DATABASE_URL=postgresql://soc_tracker:***@db:5432/soc_tracker
+DATABASE_URL=postgresql://sentriq:***@db:5432/sentriq
 ```
 
 **Shared limiter counters.** Rate limits and login lockouts live in process memory by default, which is correct for one worker and wrong for several: each worker counts only its own traffic, so N workers allow N times the limit, and a lockout applies only to the worker that saw the failed attempt. Set `REDIS_URL` to share both counters across workers. Without Redis, either keep `WEB_CONCURRENCY=1` or accept the multiplied limit.
 
-**Retention (730 days).** `python -m soc_tracker.manage retention` prints what would be archived; add `--apply` to actually do it:
+**Retention (730 days).** `python -m sentriq.manage retention` prints what would be archived; add `--apply` to actually do it:
 
 ```bash
-python -m soc_tracker.manage retention --days 730           # dry run, changes nothing
-python -m soc_tracker.manage retention --days 730 --apply   # archive, then remove
+python -m sentriq.manage retention --days 730           # dry run, changes nothing
+python -m sentriq.manage retention --days 730 --apply   # archive, then remove
 ```
 
 Only *closed* tickets are eligible, and the clock starts at closure — a ticket opened three years ago and closed last week keeps its full window. The job writes a gzipped JSON Lines archive (ticket, timeline, evidence metadata with SHA-256, SLA breaches) into `data/archive/`, reads it back to prove it opens and holds the expected number of tickets, and only then deletes rows and evidence files. One audit row records the batch. Nothing is deleted if the archive cannot be verified.
@@ -181,9 +181,9 @@ Only *closed* tickets are eligible, and the clock starts at closure — a ticket
 **Immutable audit export.** The audit trail is hash-chained on export: each record carries the hash of the one before it, so a deleted or edited row breaks the chain and verification names the record.
 
 ```bash
-python -m soc_tracker.manage audit-export                 # all records
-python -m soc_tracker.manage audit-export --from 2026-01-01 --to 2026-04-01
-python -m soc_tracker.manage audit-verify data/audit-exports/audit-20260401T000000Z.jsonl
+python -m sentriq.manage audit-export                 # all records
+python -m sentriq.manage audit-export --from 2026-01-01 --to 2026-04-01
+python -m sentriq.manage audit-verify data/audit-exports/audit-20260401T000000Z.jsonl
 ```
 
 Exports are written read-only with a manifest holding the head hash. Copy the head hash somewhere off this host (a change ticket, an external log): that anchor is what proves later that the export was not rewritten. Read-only is not immutable — for the bank's requirement, land the export in object-lock or WORM storage.
@@ -191,8 +191,8 @@ Exports are written read-only with a manifest holding the head hash. Copy the he
 **Monitoring.** `/healthz` reports database health and the age of the newest snapshot, and answers `degraded` when the snapshot is older than `BACKUP_MAX_AGE_HOURS` (default 36) without failing the check — restarting the app would not fix a dead backup job. `/metrics` serves Prometheus text: request counts and latency, tickets by status and severity, unassigned backlog, SLA breaches, evidence volume, audit row count, backup age and staleness, and which limiter store is in use. Without `METRICS_TOKEN` it answers on loopback only; with a token it requires `Authorization: Bearer <token>`.
 
 ```bash
-python -m soc_tracker.manage backup-status   # newest snapshot and its age
-python -m soc_tracker.manage sla-sweep       # record newly missed SLAs
+python -m sentriq.manage backup-status   # newest snapshot and its age
+python -m sentriq.manage sla-sweep       # record newly missed SLAs
 ```
 
 Schedule retention, the audit export and the SLA sweep from cron (or Windows Task Scheduler), and alert on `soc_backup_stale`, `soc_backup_age_seconds` and `soc_sla_breaches{state="open"}`. Set `TRUSTED_PROXIES` to the addresses of your reverse proxy so lockouts, rate limits, and audit rows key on the real client address rather than the proxy.
@@ -210,9 +210,9 @@ a single file cannot be shared by two app hosts or backed up by a DBA.
   app and points `DATABASE_URL` at it. Its files live in `./pgdata`, a host
   directory, so `docker compose down -v` cannot delete the database.
 - **Without Docker**: install Postgres 14 or newer and set
-  `DATABASE_URL=postgresql://user:***@host:5432/soc_tracker`. Migrations run at
+  `DATABASE_URL=postgresql://user:***@host:5432/sentriq`. Migrations run at
   startup.
-- **Coming from an older install**: `python -m soc_tracker.manage import-sqlite
+- **Coming from an older install**: `python -m sentriq.manage import-sqlite
   data/fastapi.sqlite3` copies every table into the configured Postgres database,
   ids included, and refuses if the target already has tickets.
 
@@ -228,7 +228,7 @@ like a usable snapshot. The container runs it at startup; for a schedule you can
 point at, use cron on the host:
 
 ```cron
-0 2 * * * cd /path/to/SOC-Tracker && docker compose exec -T soc-alert-tracker sh scripts/backup-postgres.sh /app/backups 30 0 >> /var/log/soc-tracker-backup.log 2>&1
+0 2 * * * cd /path/to/Sentriq && docker compose exec -T sentriq sh scripts/backup-postgres.sh /app/backups 30 0 >> /var/log/sentriq-backup.log 2>&1
 ```
 
 Restore into a fresh database:
@@ -280,7 +280,7 @@ Create users, manage roles (L1/L2/L3), and reset passwords.
 - Dashboard date ranges (24 hours, 7, 30, 90 days, all time) applied to the counts, charts and queue
 - Bulk actions on the queue: assign selected tickets to yourself, or move them to WIP/Pending/Open
 - Duplicate handling: tickets filed within 24 hours with the same title or asset are listed on the ticket, and L2/L3 can merge one into another — the timeline and evidence move to the surviving ticket, and the duplicate closes pointing at it
-- SLA breach history: a sweep records each missed due date and, on closure, how late the ticket actually was; the totals are exposed on `/metrics` and by `python -m soc_tracker.manage sla-sweep`
+- SLA breach history: a sweep records each missed due date and, on closure, how late the ticket actually was; the totals are exposed on `/metrics` and by `python -m sentriq.manage sla-sweep`
 - Search matches ticket number, title, description, asset, source, analyst and IOC, and filters apply in place without reloading the page or losing your scroll position
 - Notifications by email and Microsoft Teams on new high-severity tickets, assignment and escalation — each channel stays inert until it is configured
 - Evidence is attached when the ticket is created; there is no later upload, so a ticket's evidence is exactly what the analyst filed with it
@@ -361,7 +361,7 @@ Production startup fails unless both secrets are explicitly supplied and at leas
 ## Performance
 
 The dashboard, the queue and the CSV export are all built from one filter
-(`alert_query` in `soc_tracker/services/alert_service.py`), and the database
+(`alert_query` in `sentriq/services/alert_service.py`), and the database
 answers it: tiles and pie panels are `COUNT` and `GROUP BY`, and the queue pages
 with `LIMIT`/`OFFSET`. Nothing loads the whole table to count it.
 
@@ -384,7 +384,7 @@ host.
 
 The SLA sweep runs at most once every two minutes per worker instead of on every
 page load, and reads the open tickets in one query rather than one query per
-ticket. `python -m soc_tracker.manage sweep-sla` does the same work from cron if
+ticket. `python -m sentriq.manage sweep-sla` does the same work from cron if
 you would rather schedule it.
 
 ## Development

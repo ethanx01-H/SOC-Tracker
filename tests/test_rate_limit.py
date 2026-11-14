@@ -4,7 +4,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from soc_tracker import middleware
+from sentriq import middleware
 
 
 @pytest.fixture

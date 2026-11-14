@@ -12,7 +12,7 @@ import pytest
 from fastapi.routing import APIRoute
 
 from main import app
-from soc_tracker.services import evidence_service
+from sentriq.services import evidence_service
 
 
 def _endpoints(routes=None):

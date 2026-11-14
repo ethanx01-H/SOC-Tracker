@@ -7,9 +7,9 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from sqlalchemy import select
 
-from soc_tracker.models import Alert, AuditLog, Evidence, SlaBreach, User
-from soc_tracker.services import audit_export, retention_service
-from soc_tracker.services.alert_service import create_alert
+from sentriq.models import Alert, AuditLog, Evidence, SlaBreach, User
+from sentriq.services import audit_export, retention_service
+from sentriq.services.alert_service import create_alert
 
 
 def utcnow():

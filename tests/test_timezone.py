@@ -5,11 +5,11 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from fastapi.testclient import TestClient
 
-from soc_tracker import models
-from soc_tracker.auth import hash_password
-from soc_tracker.models import Alert, User
-from soc_tracker.services.alert_service import create_alert
-from soc_tracker.utils import timezone_label, to_local
+from sentriq import models
+from sentriq.auth import hash_password
+from sentriq.models import Alert, User
+from sentriq.services.alert_service import create_alert
+from sentriq.utils import timezone_label, to_local
 
 from tests.support import make_session_factory
 

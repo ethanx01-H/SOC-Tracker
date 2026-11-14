@@ -1,4 +1,4 @@
-"""SOC Alert Tracker - FastAPI Application Entry Point.
+"""Sentriq - FastAPI Application Entry Point.
 
 A lightweight, self-hosted security operations alert tracker with role-based
 alert management and Elastic SIEM import.
@@ -11,11 +11,11 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect
 
-from soc_tracker.config import ALEMBIC_HEAD, BASE_DIR, DATABASE_URL, DB_POOL_SIZE, WEB_CONCURRENCY
-from soc_tracker.middleware import security_middleware
-from soc_tracker.models import Base, engine
-from soc_tracker.routes import auth_routes, alert_routes, admin_routes, evidence_routes, metrics_routes, elastic_routes
-from soc_tracker.services import backup_status
+from sentriq.config import ALEMBIC_HEAD, BASE_DIR, DATABASE_URL, DB_POOL_SIZE, WEB_CONCURRENCY
+from sentriq.middleware import security_middleware
+from sentriq.models import Base, engine
+from sentriq.routes import auth_routes, alert_routes, admin_routes, evidence_routes, metrics_routes, elastic_routes
+from sentriq.services import backup_status
 
 # Configure logging
 logging.basicConfig(
@@ -23,10 +23,10 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
-logger = logging.getLogger("soc_tracker")
+logger = logging.getLogger("sentriq")
 
 # Create FastAPI app
-app = FastAPI(title="SOC Alert Tracker")
+app = FastAPI(title="Sentriq")
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 
 # Add security middleware
@@ -99,7 +99,7 @@ def run_migrations() -> None:
 @app.on_event("startup")
 def startup() -> None:
     """Initialize database in development only; deployment migrates before serving."""
-    logger.info("Starting SOC Alert Tracker...")
+    logger.info("Starting Sentriq...")
     # The limiter and login-lockout counters live inside each worker, so N
     # workers allow N times the per-client limit unless REDIS_URL is set.
     logger.info(
@@ -111,7 +111,7 @@ def startup() -> None:
     if os.environ.get("APP_ENV", "development").lower() != "production":
         run_migrations()
     backup_status.warn_if_stale()
-    logger.info("SOC Alert Tracker ready")
+    logger.info("Sentriq ready")
 
 
 if __name__ == "__main__":

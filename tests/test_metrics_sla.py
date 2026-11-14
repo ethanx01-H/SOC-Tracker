@@ -8,11 +8,11 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from fastapi.testclient import TestClient
 
-from soc_tracker import models
-from soc_tracker.auth import hash_password
-from soc_tracker.models import Alert, SlaBreach, User
-from soc_tracker.services import backup_status, metrics, sla_service
-from soc_tracker.services.alert_service import create_alert
+from sentriq import models
+from sentriq.auth import hash_password
+from sentriq.models import Alert, SlaBreach, User
+from sentriq.services import backup_status, metrics, sla_service
+from sentriq.services.alert_service import create_alert
 
 from tests.support import make_session_factory
 
@@ -153,7 +153,7 @@ def test_metrics_endpoint_refuses_a_public_caller(sessions):
 
 def test_metrics_endpoint_accepts_a_bearer_token(sessions, monkeypatch):
     from main import app
-    from soc_tracker.routes import metrics_routes
+    from sentriq.routes import metrics_routes
 
     monkeypatch.setattr(metrics_routes, "METRICS_TOKEN", "scrape-me")
     client = TestClient(app, client=("203.0.113.7", 50000))
@@ -166,7 +166,7 @@ def test_metrics_endpoint_accepts_a_bearer_token(sessions, monkeypatch):
 
 def test_healthz_reports_backup_freshness(sessions, tmp_path, monkeypatch):
     from main import app
-    from soc_tracker.services import backup_status as backup_module
+    from sentriq.services import backup_status as backup_module
 
     snapshot = tmp_path / "soc-pg-20260101-000000.dump"
     snapshot.write_bytes(b"x")

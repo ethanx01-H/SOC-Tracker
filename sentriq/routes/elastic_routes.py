@@ -19,7 +19,7 @@ from ..dependencies import get_db
 from ..services.alert_service import create_or_get_alert
 from ..utils import audit, redirect_to, render
 
-logger = logging.getLogger("soc_tracker.elastic_routes")
+logger = logging.getLogger("sentriq.elastic_routes")
 
 router = APIRouter()
 

@@ -30,7 +30,7 @@ from ..config import (
     SMTP_USER,
 )
 
-logger = logging.getLogger("soc_tracker.notify")
+logger = logging.getLogger("sentriq.notify")
 
 SEVERITY_RANK = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3, "Informational": 4}
 

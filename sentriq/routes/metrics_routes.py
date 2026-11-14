@@ -17,7 +17,7 @@ from ..dependencies import get_db
 from ..net import client_ip
 from ..services import metrics
 
-logger = logging.getLogger("soc_tracker.metrics_routes")
+logger = logging.getLogger("sentriq.metrics_routes")
 
 router = APIRouter()
 

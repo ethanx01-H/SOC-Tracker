@@ -2,7 +2,7 @@
 
 from starlette.requests import Request
 
-from soc_tracker.net import client_ip, is_trusted_proxy
+from sentriq.net import client_ip, is_trusted_proxy
 
 
 def make_request(peer: str, forwarded_for: str | None = None, real_ip: str | None = None) -> Request:

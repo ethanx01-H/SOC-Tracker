@@ -1,4 +1,4 @@
-"""SQLAlchemy models for SOC Alert Tracker."""
+"""SQLAlchemy models for Sentriq."""
 
 import json
 from datetime import datetime, timezone

@@ -26,7 +26,7 @@ from .limiter import (
 from .net import client_ip
 from .services import metrics
 
-logger = logging.getLogger("soc_tracker.middleware")
+logger = logging.getLogger("sentriq.middleware")
 
 __all__ = [
     "security_middleware",

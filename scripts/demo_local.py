@@ -10,7 +10,7 @@ not a server you would run in production. It exists so the demo exercises the
 same SQL as production, and its data lives in ``.demo-postgres/`` so a restart
 keeps the tickets instead of wiping them.
 
-Everything this script creates stays under ``~/.local/share/soc-tracker-demo``
+Everything this script creates stays under ``~/.local/share/sentriq-demo``
 (override with ``DEMO_STATE_DIR``): the database cluster, the app log, the pid
 file. Delete that folder to start from scratch. It is deliberately not inside
 the repository: Postgres will not initialise a cluster on a Windows drvfs mount
@@ -35,12 +35,11 @@ if str(ROOT) not in sys.path:  # run as a script, so the app package is not impo
     sys.path.insert(0, str(ROOT))
 # Postgres needs a real Linux filesystem: initdb refuses a drvfs mount such as
 # /mnt/d under WSL, so the cluster lives in the home directory, not in the repo.
-STATE = pathlib.Path(os.environ.get("DEMO_STATE_DIR", pathlib.Path.home() / ".local" / "share" / "soc-tracker-demo"))
+STATE = pathlib.Path(os.environ.get("DEMO_STATE_DIR", pathlib.Path.home() / ".local" / "share" / "sentriq-demo"))
 PGDATA = STATE / "pgdata"
 URI_FILE = STATE / "uri.txt"
 PID_FILE = STATE / "app.pid"
 LOG_FILE = STATE / "app.log"
-DEMO_SQLITE = ROOT / "data" / "demo.sqlite3"
 PORT = int(os.environ.get("DEMO_PORT", "8080"))
 WORKERS = os.environ.get("WEB_CONCURRENCY", "4")
 
@@ -73,7 +72,7 @@ def database_url() -> str | None:
     try:
         from sqlalchemy import create_engine, text
 
-        from soc_tracker.dburl import normalise_database_url
+        from sentriq.dburl import normalise_database_url
 
         engine = create_engine(normalise_database_url(url), connect_args={"connect_timeout": 5})
         with engine.connect() as connection:
@@ -121,7 +120,7 @@ def start_postgres() -> str:
         if url:
             return url
         time.sleep(1)
-    raise SystemExit("postgres did not come up in 120 s; see .demo-postgres/ and try again")
+    raise SystemExit(f"postgres did not come up in 120 s; see {STATE} and try again")
 
 
 # --------------------------------------------------------------------------
@@ -163,7 +162,7 @@ def backup(url: str) -> None:
 def ticket_count(url: str) -> int:
     from sqlalchemy import create_engine, text
 
-    from soc_tracker.dburl import normalise_database_url
+    from sentriq.dburl import normalise_database_url
 
     engine = create_engine(normalise_database_url(url))
     try:
@@ -173,12 +172,36 @@ def ticket_count(url: str) -> int:
         engine.dispose()
 
 
-def copy_demo_data(url: str) -> None:
-    """Copy data/demo.sqlite3 into the demo Postgres, ids and all."""
-    from soc_tracker.services.sqlite_import import import_sqlite
+def seed_demo_data(url: str) -> None:
+    """Create the review accounts and the synthetic demo tickets in Postgres."""
+    from sqlalchemy import create_engine, text
 
-    say(f"copying demo tickets from {DEMO_SQLITE.relative_to(ROOT)}")
-    import_sqlite(DEMO_SQLITE, url, progress=lambda line: None)
+    from sentriq.auth import hash_password
+    from sentriq.dburl import normalise_database_url
+
+    say("creating the review accounts and demo tickets")
+    engine = create_engine(normalise_database_url(url))
+    with engine.begin() as connection:
+        for username, role, is_admin in (("admin_l3", "L3", True), ("l2", "L2", False), ("l1", "L1", False)):
+            exists = connection.execute(
+                text("select 1 from fastapi_users where username = :u"), {"u": username}
+            ).scalar()
+            if not exists:
+                connection.execute(
+                    text(
+                        "insert into fastapi_users (username, password_hash, role, is_admin, "
+                        "must_change_password, is_active) values (:u, :p, :r, :a, false, true)"
+                    ),
+                    {"u": username, "p": hash_password("SocReview2026!"), "r": role, "a": is_admin},
+                )
+    engine.dispose()
+
+    subprocess.run(
+        [sys.executable, "-m", "sentriq.manage", "seed-demo"],
+        cwd=str(ROOT),
+        env={**os.environ, "DATABASE_URL": url},
+        check=False,
+    )
 
 
 # --------------------------------------------------------------------------
@@ -187,14 +210,20 @@ def copy_demo_data(url: str) -> None:
 
 
 def app_running() -> bool:
+    """True only for our gunicorn, not for whatever else took the pid over.
+
+    A bare os.kill(pid, 0) is not enough: after a crash the pid file outlives the
+    process, and the operating system eventually hands that number to something
+    else, at which point "already running" hides a dead app.
+    """
     if not PID_FILE.exists():
         return False
     try:
         pid = int(PID_FILE.read_text().strip())
-        os.kill(pid, 0)
-        return True
-    except (ValueError, ProcessLookupError, PermissionError):
+        command = pathlib.Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\x00", b" ").decode()
+    except (ValueError, OSError):
         return False
+    return "gunicorn" in command and f":{PORT}" in command
 
 
 def health() -> dict | None:
@@ -284,14 +313,14 @@ def command_start() -> int:
 
     url = start_postgres()
     migrate(url)
-    if ticket_count(url) == 0 and DEMO_SQLITE.exists():
-        copy_demo_data(url)
+    if ticket_count(url) == 0:
+        seed_demo_data(url)
     backup(url)
     start_app(url)
 
     info = health() or {}
     say("")
-    say(f"  SOC Tracker is up at http://localhost:{PORT}")
+    say(f"  Sentriq is up at http://localhost:{PORT}")
     say(f"  database      Postgres (bundled), {ticket_count(url)} tickets")
     say(f"  backup        {info.get('backup', {}).get('newest') or 'none yet'}")
     say(f"  accounts      admin_l3 / l2 / l1, password SocReview2026!")

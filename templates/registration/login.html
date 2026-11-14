@@ -3,13 +3,18 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Login - SOC Alert Tracker</title>
-    <link rel="stylesheet" href="{{ url_for('static', path='alerts/app.css') }}?v=36">
+    <title>Login - Sentriq</title>
+    <link rel="icon" href="{{ url_for('static', path='branding/favicon.ico') }}" sizes="any">
+    <link rel="icon" type="image/png" href="{{ url_for('static', path='branding/favicon-32.png') }}" sizes="32x32">
+    <link rel="apple-touch-icon" href="{{ url_for('static', path='branding/apple-touch-icon.png') }}">
+    <link rel="stylesheet" href="{{ url_for('static', path='alerts/app.css') }}?v=38">
     <script src="{{ url_for('static', path='alerts/theme.js') }}?v=35"></script>
   </head>
   <body class="login-page">
     <main class="login-card">
-      <h1>SOC Alert Tracker</h1>
+      <img class="login-logo" src="{{ url_for('static', path='branding/sentriq-mark.png') }}?v=2"
+           alt="Sentriq" width="64" height="64">
+      <h1>Sentriq</h1>
       {% if error %}<div class="message">{{ error }}</div>{% endif %}
       <form method="post" class="form-grid single">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

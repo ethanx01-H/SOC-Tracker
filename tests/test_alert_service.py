@@ -4,13 +4,13 @@ import pytest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
-from soc_tracker.services.alert_service import (
+from sentriq.services.alert_service import (
     normalized_datetime,
     sla_status,
     form_values,
     create_alert,
 )
-from soc_tracker.models import Alert
+from sentriq.models import Alert
 
 
 class TestNormalizedDatetime:

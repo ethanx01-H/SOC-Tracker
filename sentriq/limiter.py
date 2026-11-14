@@ -20,7 +20,7 @@ from .config import (
     REDIS_URL,
 )
 
-logger = logging.getLogger("soc_tracker.limiter")
+logger = logging.getLogger("sentriq.limiter")
 
 MEMORY_MAX_KEYS = 10000
 

@@ -14,7 +14,7 @@ from ..dependencies import get_db
 from ..models import Alert, AlertEvent, AuditLog, Evidence, User
 from ..utils import audit, redirect_to, render
 
-logger = logging.getLogger("soc_tracker.admin_routes")
+logger = logging.getLogger("sentriq.admin_routes")
 
 router = APIRouter()
 

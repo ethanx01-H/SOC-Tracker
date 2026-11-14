@@ -3,8 +3,8 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from soc_tracker.config import DATABASE_URL
-from soc_tracker.models import Base
+from sentriq.config import DATABASE_URL
+from sentriq.models import Base
 
 config = context.config
 # Percent signs in a password would be read as config interpolation, so escape

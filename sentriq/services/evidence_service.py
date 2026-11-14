@@ -17,7 +17,7 @@ from starlette.datastructures import UploadFile
 from ..config import ALLOWED_EVIDENCE_EXTENSIONS, MAX_UPLOAD_BYTES, UPLOAD_DIR
 from ..models import Alert, AlertEvent, Evidence, User
 
-logger = logging.getLogger("soc_tracker.evidence_service")
+logger = logging.getLogger("sentriq.evidence_service")
 
 CHUNK = 1024 * 1024
 

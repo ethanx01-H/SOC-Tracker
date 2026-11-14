@@ -25,7 +25,7 @@ from .models import AuditLog, User
 from .net import client_ip
 from .services.alert_service import sla_status
 
-logger = logging.getLogger("soc_tracker.utils")
+logger = logging.getLogger("sentriq.utils")
 
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 DISPLAY_TZ = ZoneInfo(DISPLAY_TIMEZONE)

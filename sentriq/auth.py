@@ -15,9 +15,9 @@ from .config import SECRET_KEY, SESSION_TTL_SECONDS
 from .dependencies import get_db
 from .models import User
 
-logger = logging.getLogger("soc_tracker.auth")
+logger = logging.getLogger("sentriq.auth")
 
-signer = URLSafeTimedSerializer(SECRET_KEY, salt="soc-alert-tracker")
+signer = URLSafeTimedSerializer(SECRET_KEY, salt="sentriq")
 
 
 def session_stamp(user: User) -> str:

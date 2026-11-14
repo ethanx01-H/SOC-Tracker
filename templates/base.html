@@ -3,17 +3,21 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{% block title %}SOC Alert Tracker{% endblock %}</title>
-    <link rel="stylesheet" href="{{ url_for('static', path='alerts/app.css') }}?v=36">
+    <title>{% block title %}Sentriq{% endblock %}</title>
+    <link rel="icon" href="{{ url_for('static', path='branding/favicon.ico') }}" sizes="any">
+    <link rel="icon" type="image/png" href="{{ url_for('static', path='branding/favicon-32.png') }}" sizes="32x32">
+    <link rel="apple-touch-icon" href="{{ url_for('static', path='branding/apple-touch-icon.png') }}">
+    <link rel="stylesheet" href="{{ url_for('static', path='alerts/app.css') }}?v=38">
     <script src="{{ url_for('static', path='alerts/theme.js') }}?v=35"></script>
   </head>
   <body>
     <div class="app-shell">
       <aside class="sidebar">
         <div class="brand">
-          <div class="brand-mark">SOC</div>
+          <img class="brand-mark" src="{{ url_for('static', path='branding/sentriq-mark.png') }}?v=2"
+               alt="Sentriq" width="42" height="42">
           <div>
-            <strong>SOC Tracker</strong>
+            <strong>Sentriq</strong>
             <span>{{ current_role or "No role" }}</span>
           </div>
         </div>

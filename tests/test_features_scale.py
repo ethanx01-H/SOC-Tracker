@@ -9,12 +9,12 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from soc_tracker import models
-from soc_tracker.auth import hash_password
-from soc_tracker.config import DISPLAY_TIMEZONE
-from soc_tracker.models import Alert, AlertEvent, AuditLog, Evidence, User
-from soc_tracker.services import merge_service, notify
-from soc_tracker.services.alert_service import create_alert
+from sentriq import models
+from sentriq.auth import hash_password
+from sentriq.config import DISPLAY_TIMEZONE
+from sentriq.models import Alert, AlertEvent, AuditLog, Evidence, User
+from sentriq.services import merge_service, notify
+from sentriq.services.alert_service import create_alert
 
 from tests.support import make_session_factory
 

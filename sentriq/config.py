@@ -15,20 +15,14 @@ UPLOAD_DIR = DATA_DIR / "evidence"
 DATABASE_URL = normalise_database_url((os.environ.get("DATABASE_URL") or "").strip())
 if not DATABASE_URL:
     raise RuntimeError(
-        "DATABASE_URL is required. SOC Tracker runs on Postgres only: set "
-        "DATABASE_URL=postgresql://user:password@host:5432/soc_tracker in the "
+        "DATABASE_URL is required. Sentriq runs on Postgres only: set "
+        "DATABASE_URL=postgresql://user:password@host:5432/sentriq in the "
         "environment or in .env."
-    )
-if DATABASE_URL.startswith("sqlite"):
-    raise RuntimeError(
-        "SQLite is not supported. Set DATABASE_URL to a Postgres database. An "
-        "existing SQLite database can be moved across once with "
-        "'python -m soc_tracker.manage import-sqlite <path-to.sqlite3>'."
     )
 if not DATABASE_URL.startswith("postgresql"):
     raise RuntimeError(
         "DATABASE_URL must be a Postgres URL, got "
-        f"{DATABASE_URL.split(':', 1)[0]}://..."
+        f"{DATABASE_URL.split(':', 1)[0]}://... (SQLite is not supported.)"
     )
 DB_POOL_SIZE = int(os.environ.get("DB_POOL_SIZE", "10"))
 DB_POOL_MAX_OVERFLOW = int(os.environ.get("DB_POOL_MAX_OVERFLOW", "20"))

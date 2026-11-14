@@ -12,8 +12,8 @@ if [ -f /app/scripts/backup-postgres.sh ]; then
 fi
 
 if [ -z "${DATABASE_URL:-}" ]; then
-    echo "ERROR: DATABASE_URL is not set. SOC Tracker runs on Postgres only." >&2
-    echo "ERROR: set DATABASE_URL=postgresql://user:password@host:5432/soc_tracker" >&2
+    echo "ERROR: DATABASE_URL is not set. Sentriq runs on Postgres only." >&2
+    echo "ERROR: set DATABASE_URL=postgresql://user:password@host:5432/sentriq" >&2
     exit 1
 fi
 

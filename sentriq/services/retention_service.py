@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 from ..config import ARCHIVE_DIR, RETENTION_DAYS, UPLOAD_DIR
 from ..models import Alert, AlertEvent, AuditLog, Evidence, SlaBreach
 
-logger = logging.getLogger("soc_tracker.retention")
+logger = logging.getLogger("sentriq.retention")
 
 
 def utcnow() -> datetime:

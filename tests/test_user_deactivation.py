@@ -3,9 +3,9 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from soc_tracker import models
-from soc_tracker.auth import hash_password
-from soc_tracker.models import AuditLog, User
+from sentriq import models
+from sentriq.auth import hash_password
+from sentriq.models import AuditLog, User
 
 from tests.support import make_session_factory
 

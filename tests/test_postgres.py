@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, inspect, select, text
 from sqlalchemy.orm import sessionmaker
 
-from soc_tracker.config import ALEMBIC_HEAD, normalise_database_url
+from sentriq.config import ALEMBIC_HEAD, normalise_database_url
 
 URL = os.environ.get("TEST_DATABASE_URL")
 pytestmark = pytest.mark.skipif(
@@ -63,7 +63,7 @@ def pg_sessions(pg_engine):
 def client(pg_engine, pg_sessions):
     """App client whose database is the Postgres one, not the local SQLite file."""
     from main import app
-    from soc_tracker.dependencies import get_db
+    from sentriq.dependencies import get_db
 
     def override_get_db():
         session = pg_sessions()
@@ -79,8 +79,8 @@ def client(pg_engine, pg_sessions):
 
 
 def _seed_admin(pg_sessions):
-    from soc_tracker.auth import hash_password
-    from soc_tracker.models import User
+    from sentriq.auth import hash_password
+    from sentriq.models import User
 
     with pg_sessions() as session:
         existing = session.scalar(select(User).where(User.username == "pg_admin"))
@@ -181,7 +181,7 @@ def test_close_and_audit_trail(client, pg_sessions, pg_engine):
 def test_import_deduplicates_on_postgres(pg_engine, pg_sessions):
     """A repeated Elastic export must map to the ticket it already created."""
     from alerts.elastic import parse_elastic_alerts
-    from soc_tracker.services.alert_service import create_or_get_alert
+    from sentriq.services.alert_service import create_or_get_alert
 
     raw = '{"hits": {"hits": [{"_index": "logs", "_id": "pg-doc-1", "_source": {"alert_name": "Postgres import alert"}}]}}'
 

@@ -21,7 +21,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 STATE_DIR = pathlib.Path(
-    os.environ.get("SOC_TEST_PGDATA", pathlib.Path(tempfile.gettempdir()) / "soc-tracker-tests-pg")
+    os.environ.get("SOC_TEST_PGDATA", pathlib.Path(tempfile.gettempdir()) / "sentriq-tests-pg")
 )
 
 _server = pgserver.get_server(str(STATE_DIR), cleanup_mode=None)  # pyright: ignore[reportPrivateImportUsage]
@@ -31,8 +31,8 @@ _BASE_URI = _server.get_uri()
 # the suite at a database somebody cares about.
 os.environ["DATABASE_URL"] = _BASE_URI
 
-from soc_tracker.dburl import normalise_database_url  # noqa: E402
-from soc_tracker.models import Base  # noqa: E402
+from sentriq.dburl import normalise_database_url  # noqa: E402
+from sentriq.models import Base  # noqa: E402
 
 TEMPLATE = "soc_test_template"
 

@@ -2,7 +2,7 @@
 
 import pytest
 
-from soc_tracker.auth import (
+from sentriq.auth import (
     hash_password,
     verify_password,
     validate_password_strength,
@@ -15,7 +15,7 @@ from soc_tracker.auth import (
     can_assign_alert,
     assignable_roles_for,
 )
-from soc_tracker.models import User
+from sentriq.models import User
 
 
 class TestPasswordHashing:

@@ -1,4 +1,4 @@
-"""OWASP Top 10 (2021) Security Tests for SOC Alert Tracker."""
+"""OWASP Top 10 (2021) Security Tests for Sentriq."""
 
 import hashlib
 import os
@@ -10,8 +10,8 @@ import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
-from soc_tracker.models import Base, User, Alert, AlertEvent, AuditLog, Evidence
-from soc_tracker.auth import hash_password, verify_password
+from sentriq.models import Base, User, Alert, AlertEvent, AuditLog, Evidence
+from sentriq.auth import hash_password, verify_password
 
 from tests.support import make_engine
 
@@ -33,9 +33,9 @@ def db(engine):
 
 @pytest.fixture
 def app(engine, db):
-    import soc_tracker.models
-    original = soc_tracker.models.SessionLocal
-    soc_tracker.models.SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+    import sentriq.models
+    original = sentriq.models.SessionLocal
+    sentriq.models.SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
     from main import app
 
@@ -46,7 +46,7 @@ def app(engine, db):
     db.commit()
 
     yield app
-    soc_tracker.models.SessionLocal = original
+    sentriq.models.SessionLocal = original
 
 
 @pytest.fixture
@@ -455,7 +455,7 @@ class TestA10SSRF:
 class TestAdditionalSecurity:
 
     def test_pbkdf2_iterations(self):
-        from soc_tracker.auth import hash_password
+        from sentriq.auth import hash_password
         import inspect
         source = inspect.getsource(hash_password)
         assert "240_000" in source or "240000" in source

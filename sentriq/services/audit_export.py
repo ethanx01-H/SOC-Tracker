@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 from ..config import AUDIT_EXPORT_DIR
 from ..models import AuditLog
 
-logger = logging.getLogger("soc_tracker.audit_export")
+logger = logging.getLogger("sentriq.audit_export")
 
 GENESIS = "0" * 64
 

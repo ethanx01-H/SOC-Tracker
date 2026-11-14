@@ -1,0 +1,1 @@
+# Sentriq - Modular Application

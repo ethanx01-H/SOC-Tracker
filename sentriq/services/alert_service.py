@@ -21,7 +21,7 @@ from sqlalchemy.sql.functions import FunctionElement
 from ..config import DISPLAY_TIMEZONE, SEVERITIES, STATUSES, UPLOAD_DIR
 from ..models import Alert, AlertEvent, Evidence, User
 
-logger = logging.getLogger("soc_tracker.alert_service")
+logger = logging.getLogger("sentriq.alert_service")
 
 # Dashboard and list date windows. "all" (or no value) means no time filter.
 RANGE_WINDOWS = {
