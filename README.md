@@ -75,7 +75,8 @@ This compose setup binds to localhost for review and defaults to non-secure cook
 
 The compose file bind-mounts host directories instead of using Docker volumes:
 
-- `./data` → `/app/data` — the SQLite database, its WAL files, and `evidence/`
+- `./data` → `/app/data` — `evidence/`, and the SQLite database when one is in use
+- `./pgdata` → the Postgres data directory (override with `SOC_PGDATA_DIR`)
 - `./backups` → `/app/backups` — automatic snapshots (override with `SOC_BACKUP_DIR`)
 
 Because those are host directories, `docker compose down -v`, `docker volume rm`,
@@ -178,6 +179,52 @@ python -m soc_tracker.manage sla-sweep       # record newly missed SLAs
 ```
 
 Schedule retention, the audit export and the SLA sweep from cron (or Windows Task Scheduler), and alert on `soc_backup_stale`, `soc_backup_age_seconds` and `soc_sla_breaches{state="open"}`. Set `TRUSTED_PROXIES` to the addresses of your reverse proxy so lockouts, rate limits, and audit rows key on the real client address rather than the proxy.
+
+## Database
+
+Run Postgres everywhere: the demo you show people and production. Both paths are
+supported, but they are not the same SQL. The SLA due date is
+`datetime(created_at, '+8 hours')` on SQLite and `created_at + interval '8 hours'`
+on Postgres, so a demo running on SQLite never exercises the query the bank will
+run, and the first Postgres run would be the production one.
+
+- **Docker**: `docker compose up --build` starts `postgres:16-alpine` beside the
+  app and points `DATABASE_URL` at it. Its files live in `./pgdata`, a host
+  directory, so `docker compose down -v` cannot delete the database.
+- **Without Docker**: install Postgres 14 or newer and set
+  `DATABASE_URL=postgresql://user:password@host:5432/soc_tracker`. Migrations run
+  at startup, exactly as they do for SQLite.
+- **SQLite** stays available for a quick local look: leave `DATABASE_URL` empty.
+  One file is fine for one analyst and wrong for a team, because every write locks
+  the whole database and the file has to live on the app host.
+
+Measured on 5,000 tickets, four workers, ten concurrent page loads: Postgres
+p95 125 ms for the dashboard and 62 ms for the queue; SQLite p95 419 ms and 333 ms.
+Postgres is also what lets several app hosts share one database, and what lets the
+database live on a host your DBA backs up.
+
+### Backing up Postgres
+
+`scripts/backup-postgres.sh` writes `backups/soc-pg-<stamp>.dump` with
+`pg_dump --format=custom`, keeps the newest 20, and checks each dump with
+`pg_restore --list` before renaming it into place, so a failed dump never looks
+like a usable snapshot. The container runs it at startup; for a schedule you can
+point at, use cron on the host:
+
+```cron
+0 2 * * * cd /path/to/SOC-Tracker && docker compose exec -T soc-alert-tracker sh scripts/backup-postgres.sh /app/backups 30 0 >> /var/log/soc-tracker-backup.log 2>&1
+```
+
+Restore into a fresh database:
+
+```bash
+pg_restore --no-owner --no-privileges -d "$DATABASE_URL" backups/soc-pg-YYYYmmdd-HHMMSS.dump
+```
+
+`/healthz` and `/metrics` report the newest snapshot of either kind, and go
+degraded when there is none or the newest is older than `BACKUP_MAX_AGE_HOURS`.
+If `pg_dump` is not installed, the startup log says so plainly rather than
+pretending the database is being backed up.
 
 ## Screenshots
 

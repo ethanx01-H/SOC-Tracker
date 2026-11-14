@@ -177,3 +177,22 @@ def test_healthz_reports_backup_freshness(sessions, tmp_path, monkeypatch):
     assert body["database"] == "ok"
     assert body["backup"]["count"] == 1
     assert body["status"] in {"ok", "degraded"}
+
+
+def test_backup_status_counts_postgres_dumps_too(tmp_path, monkeypatch):
+    """A Postgres instance writes .dump files; freshness must see them."""
+    monkeypatch.setattr(backup_status, "database_mode", lambda: "postgres")
+    dump = tmp_path / "soc-pg-20260102-000000.dump"
+    dump.write_bytes(b"custom-format dump")
+    just_now = time.time() - 60
+    os.utime(dump, (just_now, just_now))
+
+    info = backup_status.status(tmp_path, max_age_hours=36)
+    assert info["mode"] == "postgres"
+    assert info["count"] == 1
+    assert info["newest"] == dump.name
+    assert info["stale"] is False
+
+
+def test_backup_status_says_which_database_it_is_watching(tmp_path):
+    assert backup_status.status(tmp_path)["mode"] in {"sqlite", "postgres"}

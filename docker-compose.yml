@@ -6,10 +6,11 @@ services:
     environment:
       APP_ENV: ${APP_ENV:-review}
       SQLITE_PATH: /app/data/fastapi.sqlite3
-      # Empty DATABASE_URL keeps SQLite. To run on Postgres, start the stack with
-      #   docker compose --profile postgres up -d
-      # and set DATABASE_URL in .env to postgresql://soc_tracker:<password>@postgres:5432/soc_tracker
-      DATABASE_URL: ${DATABASE_URL:-}
+      # Postgres by default: production and the demo you show people should run
+      # the same database. Set DATABASE_URL= (empty) in .env to fall back to SQLite.
+      # If you change POSTGRES_PASSWORD, set DATABASE_URL to match - keep the
+      # password out of this file rather than nesting interpolation here.
+      DATABASE_URL: ${DATABASE_URL:-postgresql://soc_tracker:change-me-before-use@postgres:5432/soc_tracker}
       # Shared limiter counters. Set REDIS_URL=redis://redis:6379/0 and start with
       # --profile redis when WEB_CONCURRENCY is greater than 1.
       REDIS_URL: ${REDIS_URL:-}
@@ -32,16 +33,17 @@ services:
       - ./data:/app/data
       - ${SOC_BACKUP_DIR:-./backups}:/app/backups
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8080/healthz', timeout=3)"]
       interval: 30s
       timeout: 5s
       retries: 3
 
-  # Optional: docker compose --profile postgres up -d
   postgres:
     image: postgres:16-alpine
-    profiles: ["postgres"]
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-soc_tracker}
       POSTGRES_USER: ${POSTGRES_USER:-soc_tracker}
