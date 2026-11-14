@@ -5,38 +5,21 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, create_engine, event, text, true
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, create_engine, text, true
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship, sessionmaker
 
-from .config import DATABASE_URL, DB_IS_SQLITE, DB_POOL_MAX_OVERFLOW, DB_POOL_SIZE
+from .config import DATABASE_URL, DB_POOL_MAX_OVERFLOW, DB_POOL_SIZE
 
-_engine_options: dict = {"pool_pre_ping": True}
-if DB_IS_SQLITE:
-    # SQLite connections are handed to FastAPI's worker threads, which the
-    # driver otherwise refuses.
-    _engine_options["connect_args"] = {"check_same_thread": False}
-else:
-    # Postgres: a bounded pool per worker, and connections recycled well inside
-    # any idle timeout the server or a firewall enforces.
-    _engine_options.update(
-        pool_size=DB_POOL_SIZE,
-        max_overflow=DB_POOL_MAX_OVERFLOW,
-        pool_recycle=1800,
-        pool_timeout=30,
-    )
-
-engine = create_engine(DATABASE_URL, **_engine_options)
-
-
-if DB_IS_SQLITE:
-
-    @event.listens_for(engine, "connect")
-    def set_sqlite_pragma(dbapi_conn, connection_record):
-        """Enable WAL mode and busy timeout for better concurrency."""
-        cursor = dbapi_conn.cursor()
-        cursor.execute("PRAGMA journal_mode=WAL")
-        cursor.execute("PRAGMA busy_timeout=5000")
-        cursor.close()
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,
+    # A bounded pool per worker, and connections recycled well inside any idle
+    # timeout the server or a firewall enforces.
+    pool_size=DB_POOL_SIZE,
+    max_overflow=DB_POOL_MAX_OVERFLOW,
+    pool_recycle=1800,
+    pool_timeout=30,
+)
 
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)

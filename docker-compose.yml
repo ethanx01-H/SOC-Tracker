@@ -5,11 +5,9 @@ services:
     env_file: .env
     environment:
       APP_ENV: ${APP_ENV:-review}
-      SQLITE_PATH: /app/data/fastapi.sqlite3
-      # Postgres by default: production and the demo you show people should run
-      # the same database. Set DATABASE_URL= (empty) in .env to fall back to SQLite.
-      # If you change POSTGRES_PASSWORD, set DATABASE_URL to match - keep the
-      # password out of this file rather than nesting interpolation here.
+      # Postgres only: the app refuses to start without a Postgres URL. If you
+      # change POSTGRES_PASSWORD, set DATABASE_URL to match - keep the password
+      # out of this file rather than nesting interpolation here.
       DATABASE_URL: ${DATABASE_URL:-postgresql://soc_tracker:change-me-before-use@postgres:5432/soc_tracker}
       # Shared limiter counters. Set REDIS_URL=redis://redis:6379/0 and start with
       # --profile redis when WEB_CONCURRENCY is greater than 1.

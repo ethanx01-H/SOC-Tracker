@@ -186,27 +186,17 @@ def sla_status(alert: Alert) -> dict[str, str]:
 
 
 class sla_due(FunctionElement):
-    """created_at plus sla_hours, in whatever SQL the dialect speaks.
+    """created_at plus sla_hours, computed by Postgres.
 
-    SQLite has no interval type, so the hours go through its datetime()
-    modifier; Postgres multiplies an interval. The dialect picks at compile
-    time rather than at import time, because the configured database and the
-    database a query runs against are not always the same one - the test suite
-    is SQLite while an instance is configured for Postgres.
+    The dialect picks the SQL at compile time rather than at import time, so a
+    statement built here runs against whatever database it is compiled for.
+    Only Postgres has a compiler: anything else is a configuration mistake and
+    should fail loudly rather than quietly produce different arithmetic.
     """
 
     type = DateTime()
     name = "sla_due"
     inherit_cache = True
-
-
-@compiles(sla_due, "sqlite")
-def _sla_due_sqlite(element, compiler, **kw):
-    created_at, hours = list(element.clauses)
-    return "datetime(%s, '+' || %s || ' hours')" % (
-        compiler.process(created_at, **kw),
-        compiler.process(hours, **kw),
-    )
 
 
 @compiles(sla_due, "postgresql")

@@ -2,11 +2,13 @@
 
 import pytest
 
+# Imported first on purpose: it starts the test Postgres and sets DATABASE_URL,
+# which soc_tracker.config requires before it will import.
+from tests.support import make_engine, make_session_factory
+
 from soc_tracker import middleware
 from soc_tracker.auth import hash_password
 from soc_tracker.models import User
-
-from tests.support import make_engine, make_session_factory
 
 
 @pytest.fixture(autouse=True)

@@ -5,30 +5,31 @@ import secrets
 from pathlib import Path
 from dotenv import load_dotenv
 
+from .dburl import normalise_database_url
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 DATA_DIR = BASE_DIR / "data"
 UPLOAD_DIR = DATA_DIR / "evidence"
-SQLITE_PATH = os.environ.get("SQLITE_PATH", str(DATA_DIR / "fastapi.sqlite3"))
-Path(SQLITE_PATH).expanduser().resolve().parent.mkdir(parents=True, exist_ok=True)
 
-
-def normalise_database_url(url: str) -> str:
-    """Route any Postgres URL through psycopg 3.
-
-    A DBA will hand over ``postgresql://user:pass@host/db``; SQLAlchemy reads
-    that scheme as psycopg2, which this image does not ship. Rewriting the
-    scheme here means the URL can be pasted in unchanged.
-    """
-    for prefix in ("postgres://", "postgresql://"):
-        if url.startswith(prefix):
-            return "postgresql+psycopg://" + url[len(prefix):]
-    return url
-
-
-DATABASE_URL = normalise_database_url(os.environ.get("DATABASE_URL") or f"sqlite:///{SQLITE_PATH}")
-DB_IS_SQLITE = DATABASE_URL.startswith("sqlite")
-DB_IS_POSTGRES = DATABASE_URL.startswith("postgresql")
+DATABASE_URL = normalise_database_url((os.environ.get("DATABASE_URL") or "").strip())
+if not DATABASE_URL:
+    raise RuntimeError(
+        "DATABASE_URL is required. SOC Tracker runs on Postgres only: set "
+        "DATABASE_URL=postgresql://user:password@host:5432/soc_tracker in the "
+        "environment or in .env."
+    )
+if DATABASE_URL.startswith("sqlite"):
+    raise RuntimeError(
+        "SQLite is not supported. Set DATABASE_URL to a Postgres database. An "
+        "existing SQLite database can be moved across once with "
+        "'python -m soc_tracker.manage import-sqlite <path-to.sqlite3>'."
+    )
+if not DATABASE_URL.startswith("postgresql"):
+    raise RuntimeError(
+        "DATABASE_URL must be a Postgres URL, got "
+        f"{DATABASE_URL.split(':', 1)[0]}://..."
+    )
 DB_POOL_SIZE = int(os.environ.get("DB_POOL_SIZE", "10"))
 DB_POOL_MAX_OVERFLOW = int(os.environ.get("DB_POOL_MAX_OVERFLOW", "20"))
 WEB_CONCURRENCY = int(os.environ.get("WEB_CONCURRENCY", "1"))

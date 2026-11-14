@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect
 
-from soc_tracker.config import ALEMBIC_HEAD, BASE_DIR, DATABASE_URL, DB_IS_SQLITE, SQLITE_PATH, WEB_CONCURRENCY
+from soc_tracker.config import ALEMBIC_HEAD, BASE_DIR, DATABASE_URL, DB_POOL_SIZE, WEB_CONCURRENCY
 from soc_tracker.middleware import security_middleware
 from soc_tracker.models import Base, engine
 from soc_tracker.routes import auth_routes, alert_routes, admin_routes, evidence_routes, metrics_routes, elastic_routes
@@ -100,21 +100,14 @@ def run_migrations() -> None:
 def startup() -> None:
     """Initialize database in development only; deployment migrates before serving."""
     logger.info("Starting SOC Alert Tracker...")
-    if DB_IS_SQLITE and WEB_CONCURRENCY > 1:
-        # Reads parallelise fine over WAL; writes still serialise on one file,
-        # and the limiter and lockout counters live inside each worker, so N
-        # workers allow N times the limit. Postgres plus Redis is the way out
-        # once several analysts are writing at once.
-        logger.info(
-            "WEB_CONCURRENCY=%s on SQLite: reads run in parallel, writes serialise, "
-            "and per-client limits apply per worker.",
-            WEB_CONCURRENCY,
-        )
-    if DB_IS_SQLITE and os.environ.get("APP_ENV", "development").lower() == "production":
-        logger.warning(
-            "Production is running on SQLite at %s. Single host, single writer, no failover.",
-            SQLITE_PATH,
-        )
+    # The limiter and login-lockout counters live inside each worker, so N
+    # workers allow N times the per-client limit unless REDIS_URL is set.
+    logger.info(
+        "Postgres at %s, %s workers, pool %s.",
+        DATABASE_URL.rsplit("@", 1)[-1],
+        WEB_CONCURRENCY,
+        DB_POOL_SIZE,
+    )
     if os.environ.get("APP_ENV", "development").lower() != "production":
         run_migrations()
     backup_status.warn_if_stale()

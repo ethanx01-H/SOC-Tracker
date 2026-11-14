@@ -81,8 +81,8 @@ def test_backup_status_flags_a_missing_snapshot(tmp_path):
 
 
 def test_backup_status_measures_the_newest_snapshot(tmp_path):
-    old = tmp_path / "soc-data-20260101T000000Z.tar.gz"
-    new = tmp_path / "soc-data-20260102T000000Z.tar.gz"
+    old = tmp_path / "soc-pg-20260101-000000.dump"
+    new = tmp_path / "soc-pg-20260102-000000.dump"
     old.write_bytes(b"x")
     new.write_bytes(b"yy")
     ten_hours_ago = time.time() - 10 * 3600
@@ -98,7 +98,7 @@ def test_backup_status_measures_the_newest_snapshot(tmp_path):
 
 
 def test_backup_status_flags_a_stale_snapshot(tmp_path):
-    path = tmp_path / "soc-data-20260101T000000Z.tar.gz"
+    path = tmp_path / "soc-pg-20260101-000000.dump"
     path.write_bytes(b"x")
     long_ago = time.time() - 72 * 3600
     os.utime(path, (long_ago, long_ago))
@@ -168,7 +168,7 @@ def test_healthz_reports_backup_freshness(sessions, tmp_path, monkeypatch):
     from main import app
     from soc_tracker.services import backup_status as backup_module
 
-    snapshot = tmp_path / "soc-data-20260101T000000Z.tar.gz"
+    snapshot = tmp_path / "soc-pg-20260101-000000.dump"
     snapshot.write_bytes(b"x")
     monkeypatch.setattr(backup_module, "BACKUP_DIR", tmp_path)
 
@@ -179,20 +179,15 @@ def test_healthz_reports_backup_freshness(sessions, tmp_path, monkeypatch):
     assert body["status"] in {"ok", "degraded"}
 
 
-def test_backup_status_counts_postgres_dumps_too(tmp_path, monkeypatch):
-    """A Postgres instance writes .dump files; freshness must see them."""
-    monkeypatch.setattr(backup_status, "database_mode", lambda: "postgres")
+def test_backup_status_ignores_sqlite_snapshots(tmp_path):
+    """A leftover soc-data archive is not a backup of this database."""
+    (tmp_path / "soc-data-20260101T000000Z.tar.gz").write_bytes(b"old sqlite snapshot")
     dump = tmp_path / "soc-pg-20260102-000000.dump"
     dump.write_bytes(b"custom-format dump")
     just_now = time.time() - 60
     os.utime(dump, (just_now, just_now))
 
     info = backup_status.status(tmp_path, max_age_hours=36)
-    assert info["mode"] == "postgres"
     assert info["count"] == 1
     assert info["newest"] == dump.name
     assert info["stale"] is False
-
-
-def test_backup_status_says_which_database_it_is_watching(tmp_path):
-    assert backup_status.status(tmp_path)["mode"] in {"sqlite", "postgres"}

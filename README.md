@@ -95,9 +95,9 @@ This compose setup binds to localhost for review and defaults to non-secure cook
 
 The compose file bind-mounts host directories instead of using Docker volumes:
 
-- `./data` → `/app/data` — `evidence/`, and the SQLite database when one is in use
+- `./data` → `/app/data` — uploaded `evidence/`
 - `./pgdata` → the Postgres data directory (override with `SOC_PGDATA_DIR`)
-- `./backups` → `/app/backups` — automatic snapshots (override with `SOC_BACKUP_DIR`)
+- `./backups` → `/app/backups` — `pg_dump` snapshots (override with `SOC_BACKUP_DIR`)
 
 Because those are host directories, `docker compose down -v`, `docker volume rm`,
 `docker volume prune` and `docker system prune --volumes` cannot delete the alerts or the
@@ -105,32 +105,30 @@ evidence. Those commands only remove Docker-managed volumes, and this stack no l
 any.
 
 Every container start writes a snapshot before the app serves traffic (newest 20 kept, at
-most one every five minutes). `scripts/backup.sh` copies the database with SQLite's online
-backup API — safe while the app is serving, unlike copying the `.sqlite3` file next to its
-`-wal` — verifies the copy with `PRAGMA quick_check`, and tars it together with the evidence
-files. To restore one:
+most one every five minutes). `scripts/backup-postgres.sh` runs `pg_dump --format=custom`,
+checks the result with `pg_restore --list`, and only then renames it into place, so a failed
+dump never looks like a usable snapshot. To restore one into a fresh database:
 
 ```bash
-docker compose down
-docker compose run --rm --entrypoint sh soc-alert-tracker scripts/restore-data.sh /app/backups/soc-data-YYYYmmdd-HHMMSS.tar.gz /app/data --force
-docker compose up -d
+docker compose exec -T postgres createdb -U soc_tracker soc_tracker_restore
+pg_restore --no-owner --no-privileges -d "postgresql://soc_tracker:***@localhost:5432/soc_tracker_restore" backups/soc-pg-YYYYmmdd-HHMMSS.dump
 ```
 
 For a nightly snapshot while the stack is running, use the host scheduler. Linux or WSL
 (`crontab -e`), 02:00 daily, keep 30, no minimum interval:
 
 ```cron
-0 2 * * * cd /path/to/SOC-Tracker && docker compose exec -T soc-alert-tracker sh scripts/backup.sh /app/data /app/backups 30 0 >> /var/log/soc-tracker-backup.log 2>&1
+0 2 * * * cd /path/to/SOC-Tracker && docker compose exec -T soc-alert-tracker sh scripts/backup-postgres.sh /app/backups 30 0 >> /var/log/soc-tracker-backup.log 2>&1
 ```
 
 On Windows, create a daily Task Scheduler job that runs:
 
 ```powershell
-powershell -Command "cd D:\IT\automation_script\SOC-Tracker; docker compose exec -T soc-alert-tracker sh scripts/backup.sh /app/data /app/backups 30 0"
+powershell -Command "cd D:\IT\automation_script\SOC-Tracker; docker compose exec -T soc-alert-tracker sh scripts/backup-postgres.sh /app/backups 30 0"
 ```
 
-Test the restore path, not just the backup: run the restore commands above against a
-snapshot at least once a quarter. A backup nobody has restored is a guess.
+Test the restore path, not just the backup: restore a snapshot into a scratch database at
+least once a quarter and compare row counts. A backup nobody has restored is a guess.
 
 Updating is then just:
 
@@ -154,23 +152,22 @@ docker run --rm -v soc-tracker_soc_tracker_data:/from -v "$PWD/data:/to" alpine 
 
 Confirm the tickets are there, then remove the old volume with `docker volume rm
 soc-tracker_soc_tracker_data`. On a Linux host the container runs as uid 1000, so make the
-directory writable: `chown -R 1000:1000 data backups`. Since the container and a local
-`uvicorn main:app` now share `./data`, run one at a time — two writers on one SQLite file
-is how databases get corrupted.
+directory writable: `chown -R 1000:1000 data backups`.
 
 ### Data storage and retention
 
-The local/demo app stores alert, account, event, and audit records in `data/fastapi.sqlite3` and evidence files in `data/evidence/`. In Docker, both are under `/app/data`, bind-mounted from `./data` on the host (see above). Alert deletion is disabled; tickets leave the database only through the retention job below, which archives them first. Removing the host directory or losing the host can still destroy the data — the snapshots in `./backups` are the recovery point.
+Alert, account, event, and audit records live in Postgres; uploaded evidence lives in `data/evidence/`. In Docker the evidence directory is bind-mounted from `./data` and the database files sit in `./pgdata` (see above). Alert deletion is disabled; tickets leave the database only through the retention job below, which archives them first. Losing the host can still destroy the data — the `pg_dump` snapshots in `./backups` are the recovery point, and a database host your DBA backs up is better still.
 
-**Running on Postgres.** Set `DATABASE_URL` and the app uses it instead of SQLite — nothing else changes, and the same migrations run:
+**Postgres is required.** `DATABASE_URL` has no default: the app refuses to start
+without it, and refuses a `sqlite://` URL with an explanation. Both `postgres://`
+and `postgresql://` are rewritten to `psycopg://` internally, so a URL copied from
+a DBA works unchanged:
 
 ```bash
-DATABASE_URL=postgresql://soc_tracker:password@db:5432/soc_tracker
+DATABASE_URL=postgresql://soc_tracker:***@db:5432/soc_tracker
 ```
 
-Both `postgres://` and `postgresql://` are rewritten to `psycopg://` internally, so a URL copied from a DBA works unchanged. With Postgres you can also raise `WEB_CONCURRENCY` above 1, which SQLite cannot support: SQLite serialises writers across the whole file, so several workers on one file become lock waits rather than parallelism. The app logs a warning if it sees `WEB_CONCURRENCY>1` on SQLite.
-
-**Shared limiter counters.** Rate limits and login lockouts live in process memory by default, which is correct for one worker and wrong for several: each worker counts only its own traffic, so N workers allow N times the limit, and a lockout applies only to the worker that saw the failed attempt. Set `REDIS_URL` to share both counters across workers. Without Redis and without a shared store, keep `WEB_CONCURRENCY=1`.
+**Shared limiter counters.** Rate limits and login lockouts live in process memory by default, which is correct for one worker and wrong for several: each worker counts only its own traffic, so N workers allow N times the limit, and a lockout applies only to the worker that saw the failed attempt. Set `REDIS_URL` to share both counters across workers. Without Redis, either keep `WEB_CONCURRENCY=1` or accept the multiplied limit.
 
 **Retention (730 days).** `python -m soc_tracker.manage retention` prints what would be archived; add `--apply` to actually do it:
 
@@ -202,26 +199,25 @@ Schedule retention, the audit export and the SLA sweep from cron (or Windows Tas
 
 ## Database
 
-Run Postgres everywhere: the demo you show people and production. Both paths are
-supported, but they are not the same SQL. The SLA due date is
-`datetime(created_at, '+8 hours')` on SQLite and `created_at + interval '8 hours'`
-on Postgres, so a demo running on SQLite never exercises the query the bank will
-run, and the first Postgres run would be the production one.
+Postgres, and nothing else. There is no SQLite fallback: the app refuses to start
+without a Postgres `DATABASE_URL`, and refuses a `sqlite://` URL with a message
+that says so. Two reasons. The SQL differs between engines — the SLA due date is
+`created_at + interval '8 hours'` here — so a SQLite demo would never exercise the
+query production runs, and the first Postgres run would be the production one. And
+a single file cannot be shared by two app hosts or backed up by a DBA.
 
 - **Docker**: `docker compose up --build` starts `postgres:16-alpine` beside the
   app and points `DATABASE_URL` at it. Its files live in `./pgdata`, a host
   directory, so `docker compose down -v` cannot delete the database.
 - **Without Docker**: install Postgres 14 or newer and set
-  `DATABASE_URL=postgresql://user:password@host:5432/soc_tracker`. Migrations run
-  at startup, exactly as they do for SQLite.
-- **SQLite** stays available for a quick local look: leave `DATABASE_URL` empty.
-  One file is fine for one analyst and wrong for a team, because every write locks
-  the whole database and the file has to live on the app host.
+  `DATABASE_URL=postgresql://user:***@host:5432/soc_tracker`. Migrations run at
+  startup.
+- **Coming from an older install**: `python -m soc_tracker.manage import-sqlite
+  data/fastapi.sqlite3` copies every table into the configured Postgres database,
+  ids included, and refuses if the target already has tickets.
 
-Measured on 5,000 tickets, four workers, ten concurrent page loads: Postgres
-p95 125 ms for the dashboard and 62 ms for the queue; SQLite p95 419 ms and 333 ms.
-Postgres is also what lets several app hosts share one database, and what lets the
-database live on a host your DBA backs up.
+Measured on 5,000 tickets, four workers, ten concurrent page loads: Postgres p95
+125 ms for the dashboard and 62 ms for the queue.
 
 ### Backing up Postgres
 
@@ -241,8 +237,8 @@ Restore into a fresh database:
 pg_restore --no-owner --no-privileges -d "$DATABASE_URL" backups/soc-pg-YYYYmmdd-HHMMSS.dump
 ```
 
-`/healthz` and `/metrics` report the newest snapshot of either kind, and go
-degraded when there is none or the newest is older than `BACKUP_MAX_AGE_HOURS`.
+`/healthz` and `/metrics` report the newest `soc-pg-*.dump` and go degraded when
+there is none or the newest is older than `BACKUP_MAX_AGE_HOURS`.
 If `pg_dump` is not installed, the startup log says so plainly rather than
 pretending the database is being backed up.
 
@@ -310,7 +306,7 @@ Create users, manage roles (L1/L2/L3), and reset passwords.
 
 Admins create users on the **Users** page and can deactivate, reactivate or delete them from the same row. A deactivated account cannot sign in (the login form gives the same "invalid username or password" answer, so it does not confirm which accounts exist), and any session it already holds stops working on the next request. Deactivation is reversible and keeps the account, its tickets and its audit trail; nothing is deleted.
 
-**Delete** removes the row permanently, but only for an account with no history — no tickets, timeline events, evidence or audit entries. If anything references the account the delete is refused, and the message states how many records would lose their attribution. That refusal is deliberate: SQLite here does not enforce foreign keys, so deleting a user who worked tickets would not raise an error, it would quietly leave "Created by" and "Assigned to" blank on their incidents. For a leaver who touched tickets, deactivate instead — access ends immediately and the record stays intact.
+**Delete** removes the row permanently, but only for an account with no history — no tickets, timeline events, evidence or audit entries. If anything references the account the delete is refused, and the message states how many records would lose their attribution. That refusal is deliberate: the database would refuse the delete anyway, but a raw foreign-key error is a poor thing to show an administrator, so the check explains which records would lose their attribution. For a leaver who touched tickets, deactivate instead — access ends immediately and the record stays intact.
 
 Two guards apply to both actions: you cannot act on your own account, and the last active administrator cannot be removed.
 
@@ -333,7 +329,6 @@ All settings are controlled via environment variables. See `.env.example` for th
 | Variable                 | Required | Default                | Description                              |
 |--------------------------|----------|------------------------|------------------------------------------|
 | `APP_SECRET_KEY`         | Yes*     | auto-generated         | Cookie signing key (must persist)        |
-| `SQLITE_PATH`            | No       | `data/fastapi.sqlite3` | SQLite database path                     |
 | `COOKIE_SECURE`          | No       | `0`                    | Set to `1` for HTTPS-only cookies        |
 | `RATE_LIMIT_REQUESTS`    | No       | `120`                  | Max requests per window                  |
 | `RATE_LIMIT_WINDOW`      | No       | `60`                   | Rate limit window in seconds             |
@@ -342,7 +337,7 @@ All settings are controlled via environment variables. See `.env.example` for th
 | `LOGIN_LOCKOUT_SECONDS`  | No       | `300`                  | Lockout duration in seconds              |
 | `TRUSTED_PROXIES`        | No       | `127.0.0.1/32,::1/128` | Peers allowed to set `X-Forwarded-For`   |
 | `DISPLAY_TIMEZONE`       | No       | `Asia/Yangon`          | Zone used to render stored UTC times     |
-| `DATABASE_URL`           | No       | SQLite file            | Postgres URL; switches the whole app     |
+| `DATABASE_URL`           | **Yes**  | —                      | Postgres URL; the app will not start without it |
 | `WEB_CONCURRENCY`        | No       | `4`                    | Worker processes; see Performance        |
 | `REDIS_URL`              | No       | unset                  | Shared limiter and lockout counters      |
 | `RETENTION_DAYS`         | No       | `730`                  | Archive window for closed tickets        |
@@ -370,7 +365,7 @@ The dashboard, the queue and the CSV export are all built from one filter
 answers it: tiles and pie panels are `COUNT` and `GROUP BY`, and the queue pages
 with `LIMIT`/`OFFSET`. Nothing loads the whole table to count it.
 
-Measured on a 5,000-ticket database, one host, SQLite:
+Measured on a 5,000-ticket database, one host, SQLite (the engine in use when the query layer was rewritten; the Postgres figures are in [Database](#database)):
 
 | page                     | before        | after, 1 worker | after, 4 workers |
 |--------------------------|---------------|-----------------|------------------|
@@ -380,9 +375,9 @@ Measured on a 5,000-ticket database, one host, SQLite:
 | queue, 10 at once        | ~17,000 ms    | 551 ms          | 38 ms            |
 
 Ten concurrent analysts is the target, so `WEB_CONCURRENCY` now defaults to 4.
-Workers are separate processes, which is what turns the queue into parallel work;
-SQLite still serialises writes, and the rate limiter and login lockout counters
-live inside each worker, so four workers allow four times the per-client limit.
+Workers are separate processes, which is what turns the queue into parallel work.
+The rate limiter and login lockout counters live inside each worker, so four
+workers allow four times the per-client limit.
 Set `REDIS_URL` to share those counters, and move to Postgres (`DATABASE_URL`)
 when several analysts write at the same time or the database must live off this
 host.
@@ -408,7 +403,7 @@ The `--reload` flag auto-restarts on code changes. Do not use `--reload` in prod
 
 ## Tech stack
 
-- **Backend:** FastAPI + SQLAlchemy + Alembic (SQLite with WAL mode)
+- **Backend:** FastAPI + SQLAlchemy + Alembic (Postgres 14+)
 - **Frontend:** Jinja2 server-rendered HTML, vanilla CSS (light/dark)
 - **Auth:** Cookie-based sessions with PBKDF2-SHA256 password hashing
 - **Security:** CSRF protection, rate limiting, login lockout, security headers, audit logging
@@ -439,10 +434,22 @@ Test coverage includes:
 - Limiter counters in memory and through Redis (`fakeredis`), including the Redis-outage fallback
 - A guard that no request handler is declared `async def`, so blocking database and PBKDF2 work stays off the event loop
 
-The suite runs on SQLite in-memory. The Postgres path has its own module:
+The suite runs on Postgres. It starts a bundled Postgres server for the session
+(`pgserver`, a development dependency) and gives every test its own database
+cloned from a migrated template, so tests stay isolated without a shared fixture
+database. Nothing else to start:
 
 ```bash
-TEST_DATABASE_URL=postgresql://user:pass@host/scratch_db pytest tests/test_postgres.py
+pip install -r requirements-dev.txt
+.venv/bin/python -m pytest
+```
+
+`tests/test_postgres.py` still exists as a separate check that drops and recreates
+the `public` schema and runs the real migrations to head, which is closer to a
+fresh deployment than the template clone is:
+
+```bash
+TEST_DATABASE_URL=postgresql://user:***@host/scratch_db pytest tests/test_postgres.py
 ```
 
 It drops and recreates the `public` schema, runs the real migrations to head, and drives a ticket round trip, a close with audit rows, and import deduplication. Point it at a scratch database only.

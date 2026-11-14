@@ -117,25 +117,22 @@ def test_chart_totals_agree_with_the_filter(db, boundary_tickets):
         assert [s["label"] for s in from_query[panel]["slices"]] == [s["label"] for s in from_list[panel]["slices"]]
 
 
-def test_the_sla_deadline_compiles_for_both_databases():
-    """The dialect picks the SQL, not a global read at import time.
+def test_the_sla_deadline_is_postgres_sql():
+    """Postgres arithmetic, and no quiet fallback for another dialect.
 
-    The suite runs SQLite even when the process is configured for Postgres, so
-    an import-time branch here would emit interval arithmetic at a SQLite
-    connection and fail with a syntax error.
+    The suite used to run on SQLite, which is how an import-time dialect branch
+    survived long enough to break nine tests the day Postgres was configured.
     """
     from sqlalchemy import select
     from sqlalchemy.dialects import postgresql, sqlite
+    from sqlalchemy.exc import CompileError
 
     from soc_tracker.services.alert_service import _sla_due_sql
 
     statement = select(_sla_due_sql(Alert.created_at, Alert.sla_hours))
-    sqlite_sql = str(statement.compile(dialect=sqlite.dialect()))
     postgres_sql = str(statement.compile(dialect=postgresql.dialect()))
-
-    assert "datetime(" in sqlite_sql
-    assert "|| ' hours'" in sqlite_sql
-    assert "interval" not in sqlite_sql
-
     assert "interval '1 hour'" in postgres_sql
     assert "datetime(" not in postgres_sql
+
+    with pytest.raises(CompileError):
+        statement.compile(dialect=sqlite.dialect())

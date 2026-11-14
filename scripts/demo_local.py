@@ -19,13 +19,11 @@ such as ``/mnt/d`` under WSL.
 
 from __future__ import annotations
 
-import datetime as dt
 import json
 import os
 import pathlib
 import shutil
 import signal
-import sqlite3
 import subprocess
 import sys
 import time
@@ -75,7 +73,7 @@ def database_url() -> str | None:
     try:
         from sqlalchemy import create_engine, text
 
-        from soc_tracker.config import normalise_database_url
+        from soc_tracker.dburl import normalise_database_url
 
         engine = create_engine(normalise_database_url(url), connect_args={"connect_timeout": 5})
         with engine.connect() as connection:
@@ -165,7 +163,7 @@ def backup(url: str) -> None:
 def ticket_count(url: str) -> int:
     from sqlalchemy import create_engine, text
 
-    from soc_tracker.config import normalise_database_url
+    from soc_tracker.dburl import normalise_database_url
 
     engine = create_engine(normalise_database_url(url))
     try:
@@ -176,66 +174,11 @@ def ticket_count(url: str) -> int:
 
 
 def copy_demo_data(url: str) -> None:
-    """Copy data/demo.sqlite3 into the demo Postgres, ids and all.
-
-    SQLite stores booleans as 0/1 and timestamps as text, which Postgres will
-    not accept, so each value is converted to the type the column declares.
-    """
-    from sqlalchemy import Boolean, DateTime, create_engine, inspect, text
-
-    from soc_tracker.config import normalise_database_url
+    """Copy data/demo.sqlite3 into the demo Postgres, ids and all."""
+    from soc_tracker.services.sqlite_import import import_sqlite
 
     say(f"copying demo tickets from {DEMO_SQLITE.relative_to(ROOT)}")
-    engine = create_engine(normalise_database_url(url))
-    inspector = inspect(engine)
-    source = sqlite3.connect(DEMO_SQLITE)
-    source.row_factory = sqlite3.Row
-
-    def coerce(value, column_type):
-        if value is None:
-            return None
-        if isinstance(column_type, Boolean):
-            return bool(value)
-        if isinstance(column_type, DateTime) and isinstance(value, str):
-            return dt.datetime.fromisoformat(value)
-        return value
-
-    with engine.begin() as connection:
-        for table in TABLES:
-            types = {column["name"]: column["type"] for column in inspector.get_columns(table)}
-            rows = [
-                {name: coerce(row[name], types[name]) for name in row.keys()}
-                for row in source.execute(f"select * from {table}")
-            ]
-            if not rows:
-                continue
-
-            deferred = []
-            if table == "fastapi_alerts":
-                deferred = [(row["id"], row["duplicate_of_id"]) for row in rows if row["duplicate_of_id"]]
-                for row in rows:
-                    row["duplicate_of_id"] = None
-
-            columns = ", ".join(rows[0])
-            placeholders = ", ".join(f":{name}" for name in rows[0])
-            connection.execute(text(f"insert into {table} ({columns}) values ({placeholders})"), rows)
-
-            for alert_id, duplicate_of in deferred:
-                connection.execute(
-                    text("update fastapi_alerts set duplicate_of_id = :dup where id = :id"),
-                    {"dup": duplicate_of, "id": alert_id},
-                )
-
-        for table in TABLES:
-            connection.execute(
-                text(
-                    f"select setval(pg_get_serial_sequence('{table}', 'id'), "
-                    f"coalesce((select max(id) from {table}), 1))"
-                )
-            )
-
-    source.close()
-    engine.dispose()
+    import_sqlite(DEMO_SQLITE, url, progress=lambda line: None)
 
 
 # --------------------------------------------------------------------------
