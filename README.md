@@ -19,7 +19,7 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Set `APP_SECRET_KEY` and `N8N_API_KEY` in `.env` to different random values of at least 32 characters, then start the app bound to this computer:
+Set `APP_SECRET_KEY` in `.env` to a random value of at least 32 characters, then start the app bound to this computer:
 
 ```bash
 .venv/bin/uvicorn main:app --host 127.0.0.1 --port 8080
@@ -57,7 +57,7 @@ Change the shared demo password after signing in. Do not use it outside this loc
 git clone https://github.com/ethanx01-H/SOC-Tracker.git
 cd SOC-Tracker
 cp .env.example .env
-# Replace N8N_API_KEY and APP_SECRET_KEY with separate random 32-byte secrets.
+# Replace APP_SECRET_KEY with a random 32-byte secret.
 docker compose up --build
 ```
 
@@ -261,6 +261,8 @@ The parser extracts title, description, source, severity, asset, MITRE tactic, a
 
 ### n8n webhook integration
 
+Off by default. Set `N8N_API_KEY` and the two endpoints below accept posts carrying that key in the `X-API-Key` header; with no key they answer `503 webhook disabled`, so nothing is ever ingested anonymously.
+
 Push alerts from n8n workflows:
 
 ```bash
@@ -290,7 +292,7 @@ All settings are controlled via environment variables. See `.env.example` for th
 
 | Variable                 | Required | Default                | Description                              |
 |--------------------------|----------|------------------------|------------------------------------------|
-| `N8N_API_KEY`            | Yes*     | auto-generated         | Shared secret for n8n webhook API        |
+| `N8N_API_KEY`            | No       | unset (ingest off)     | Enables the n8n ingest endpoints         |
 | `APP_SECRET_KEY`         | Yes*     | auto-generated         | Cookie signing key (must persist)        |
 | `SQLITE_PATH`            | No       | `data/fastapi.sqlite3` | SQLite database path                     |
 | `COOKIE_SECURE`          | No       | `0`                    | Set to `1` for HTTPS-only cookies        |

@@ -14,7 +14,7 @@ from typing import Annotated, Any
 from alerts.elastic import parse_elastic_alerts, record_to_alert, records_from
 
 from ..auth import can_create_alert, require_user, UserDep
-from ..config import N8N_API_HEADER, N8N_API_KEY
+from ..config import N8N_API_HEADER, N8N_API_KEY, WEBHOOK_ENABLED
 from ..dependencies import get_db
 from ..models import Alert, AlertEvent, AuditLog
 from ..net import client_ip
@@ -27,9 +27,22 @@ router = APIRouter()
 
 
 def api_key_valid(request: Request) -> bool:
-    """Validate n8n API key using timing-safe comparison."""
+    """Validate n8n API key using timing-safe comparison.
+
+    With no key configured the integration is switched off rather than left
+    open, so these routes answer 503 instead of accepting anonymous posts.
+    """
+    if not WEBHOOK_ENABLED:
+        return False
     provided = request.headers.get(N8N_API_HEADER, "")
     return hmac.compare_digest(provided.encode(), N8N_API_KEY.encode())
+
+
+def webhook_disabled() -> JSONResponse:
+    return JSONResponse(
+        {"ok": False, "error": "webhook disabled", "detail": "Set N8N_API_KEY to enable n8n ingest."},
+        status_code=503,
+    )
 
 
 @router.get("/elastic/import/", response_class=HTMLResponse)
@@ -67,6 +80,8 @@ def elastic_import(request: Request, raw_json: Annotated[str, Form()], user: Use
 @router.post("/api/webhook/n8n")
 @router.post("/api/webhook/n8n/")
 def n8n_webhook(request: Request, payload: Any = Body(None), db: Session = Depends(get_db)):
+    if not WEBHOOK_ENABLED:
+        return webhook_disabled()
     if not api_key_valid(request):
         logger.warning("Invalid API key attempt from %s", client_ip(request))
         return JSONResponse({"ok": False, "error": "invalid api key"}, status_code=401)
@@ -105,6 +120,8 @@ def n8n_webhook(request: Request, payload: Any = Body(None), db: Session = Depen
 @router.post("/api/webhook/n8n/logs")
 @router.post("/api/webhook/n8n/logs/")
 def n8n_log_webhook(request: Request, payload: Any = Body(None), db: Session = Depends(get_db)):
+    if not WEBHOOK_ENABLED:
+        return webhook_disabled()
     if not api_key_valid(request):
         return JSONResponse({"ok": False, "error": "invalid api key"}, status_code=401)
     if not isinstance(payload, dict):

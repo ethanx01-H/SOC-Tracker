@@ -1,5 +1,11 @@
 """Pytest configuration and fixtures."""
 
+import os
+
+# The n8n ingest endpoints answer 503 unless a key is configured, and the tests
+# below exercise them. This must run before soc_tracker.config is imported.
+os.environ.setdefault("N8N_API_KEY", "test-only-webhook-key")
+
 import pytest
 
 from soc_tracker import middleware
