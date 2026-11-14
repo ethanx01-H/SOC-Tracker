@@ -39,11 +39,33 @@ RANGE_CHOICES = (
 DISPLAY_TZ = ZoneInfo(DISPLAY_TIMEZONE)
 
 
-def _parse_day(raw: str) -> date | None:
-    try:
-        return date.fromisoformat(raw.strip())
-    except (AttributeError, ValueError):
+def _parse_period(raw: str) -> tuple[date, date] | None:
+    """Read a day, a month (2026-10) or a year (2026) as [first day, day after last].
+
+    One parser for all three so the calendar can offer Day / Month / Year
+    without the filter growing three code paths that drift apart.
+    """
+    value = (raw or "").strip()
+    if not value:
         return None
+    try:
+        if len(value) == 4 and value.isdigit():
+            first = date(int(value), 1, 1)
+            return first, date(first.year + 1, 1, 1)
+        if len(value) == 7 and value[4] == "-":
+            year, month = value.split("-")
+            first = date(int(year), int(month), 1)
+            following = date(first.year + 1, 1, 1) if first.month == 12 else date(first.year, first.month + 1, 1)
+            return first, following
+        day = date.fromisoformat(value)
+        return day, day + timedelta(days=1)
+    except ValueError:
+        return None
+
+
+def _local_midnight(day: date) -> datetime:
+    """Midnight on that day in the display timezone, as naive UTC."""
+    return datetime.combine(day, time.min, tzinfo=DISPLAY_TZ).astimezone(timezone.utc).replace(tzinfo=None)
 
 
 def custom_window(request) -> tuple[datetime | None, datetime | None]:
@@ -53,18 +75,14 @@ def custom_window(request) -> tuple[datetime | None, datetime | None]:
     built in the display timezone and converted: without this, "1 November" in
     Asia/Yangon would start six and a half hours early and quietly include
     tickets from the previous afternoon. The upper bound is exclusive (midnight
-    after the chosen day) so the whole final day is included.
+    after the chosen day, month or year) so the whole final period is included.
     """
-    start_day = _parse_day(request.query_params.get("from") or "")
-    end_day = _parse_day(request.query_params.get("to") or "")
-    if start_day and end_day and end_day < start_day:
-        start_day, end_day = end_day, start_day
-    start = end = None
-    if start_day:
-        start = datetime.combine(start_day, time.min, tzinfo=DISPLAY_TZ).astimezone(timezone.utc).replace(tzinfo=None)
-    if end_day:
-        following = end_day + timedelta(days=1)
-        end = datetime.combine(following, time.min, tzinfo=DISPLAY_TZ).astimezone(timezone.utc).replace(tzinfo=None)
+    start_period = _parse_period(request.query_params.get("from") or "")
+    end_period = _parse_period(request.query_params.get("to") or "")
+    if start_period and end_period and end_period[0] < start_period[0]:
+        start_period, end_period = end_period, start_period
+    start = _local_midnight(start_period[0]) if start_period else None
+    end = _local_midnight(end_period[1]) if end_period else None
     return start, end
 
 

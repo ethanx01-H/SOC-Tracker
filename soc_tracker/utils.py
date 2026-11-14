@@ -104,8 +104,37 @@ def base_context(request: Request, user: User | None, db: Session) -> dict:
         "sla_status": sla_status,
         "display_timezone": timezone_label(),
         "csrf_token": csrf_token_for(request),
-        "date_from": request.query_params.get("from", ""),
-        "date_to": request.query_params.get("to", ""),
+        **_date_fields(request),
+    }
+
+
+def date_unit(raw: str) -> str | None:
+    """Which granularity a from/to value is written in."""
+    value = (raw or "").strip()
+    if len(value) == 4 and value.isdigit():
+        return "year"
+    if len(value) == 7 and value[4] == "-":
+        return "month"
+    if len(value) == 10 and value[4] == "-" and value[7] == "-":
+        return "day"
+    return None
+
+
+def _date_fields(request: Request) -> dict:
+    """Render the calendar inputs at the granularity the URL is already using.
+
+    Day / month / year share the two fields, so the input type follows the value
+    that is set. A value that does not fit the chosen type is left out rather
+    than shown as an invalid date.
+    """
+    raw_from = request.query_params.get("from", "")
+    raw_to = request.query_params.get("to", "")
+    unit = date_unit(raw_from) or date_unit(raw_to) or "day"
+    return {
+        "date_unit": unit,
+        "date_input_type": {"day": "date", "month": "month", "year": "number"}[unit],
+        "date_from": raw_from if date_unit(raw_from) == unit else "",
+        "date_to": raw_to if date_unit(raw_to) == unit else "",
     }
 
 

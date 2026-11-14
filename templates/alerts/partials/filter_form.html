@@ -2,7 +2,7 @@
   {% if active_range and active_range != 'all' and not (date_from or date_to) %}
     <input type="hidden" name="range" value="{{ active_range }}">
   {% endif %}
-  <input name="q" value="{{ request.query_params.get('q', '') }}" placeholder="Search alert, asset, IOC, analyst" autocomplete="off" spellcheck="false" aria-label="Search alerts">
+  <input name="q" value="{{ request.query_params.get('q', '') }}" placeholder="Search alerts, assets, IOCs" autocomplete="off" spellcheck="false" aria-label="Search alerts">
   <select name="severity" aria-label="Severity">
     <option value="">All severities</option>
     {% for severity in severities %}
@@ -15,13 +15,21 @@
       <option value="{{ status }}" {% if request.query_params.get('status') == status %}selected{% endif %}>{{ status }}</option>
     {% endfor %}
   </select>
-  <label class="date-field" title="Show tickets filed on or after this date">
-    <span>From</span>
-    <input type="date" name="from" value="{{ date_from }}" aria-label="From date">
-  </label>
-  <label class="date-field" title="Show tickets filed on or before this date">
-    <span>To</span>
-    <input type="date" name="to" value="{{ date_to }}" aria-label="To date">
-  </label>
+  <span class="date-legend">Range</span>
+  <select name="unit" data-date-unit aria-label="Date granularity" title="Pick a single day, a whole month, or a whole year">
+    <option value="day" {% if date_unit == 'day' %}selected{% endif %}>Day</option>
+    <option value="month" {% if date_unit == 'month' %}selected{% endif %}>Month</option>
+    <option value="year" {% if date_unit == 'year' %}selected{% endif %}>Year</option>
+  </select>
+  <span class="date-pair">
+    <label class="date-field" title="Show tickets filed in or after this period">
+      <span>From</span>
+      <input type="{{ date_input_type }}" name="from" value="{{ date_from }}"{% if date_input_type == 'number' %} min="2000" max="2100" step="1" placeholder="2026"{% endif %} aria-label="From date">
+    </label>
+    <label class="date-field" title="Show tickets filed in or before this period">
+      <span>To</span>
+      <input type="{{ date_input_type }}" name="to" value="{{ date_to }}"{% if date_input_type == 'number' %} min="2000" max="2100" step="1" placeholder="2026"{% endif %} aria-label="To date">
+    </label>
+  </span>
   <button type="submit">Filter</button>
 </form>

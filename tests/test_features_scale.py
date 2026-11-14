@@ -148,6 +148,58 @@ def test_unparseable_dates_are_ignored(client, sessions):
     assert "Still visible" in page.text
 
 
+def test_a_month_range_covers_the_whole_month(client, sessions):
+    db = sessions()
+    user = db.scalar(select(User).where(User.username == "l2"))
+    seed_at(db, user, "Mid October ticket", local_to_utc(2026, 10, 20, 10, 15))
+    # 23:00 on the last day: the exclusive upper bound must still include it.
+    seed_at(db, user, "Halloween late ticket", local_to_utc(2026, 10, 31, 23, 0))
+    db.close()
+
+    sign_in(client)
+    october = client.get("/alerts/?from=2026-10&to=2026-10")
+    assert "Mid October ticket" in october.text
+    assert "Halloween late ticket" in october.text
+
+    september = client.get("/alerts/?from=2026-09&to=2026-09")
+    assert "Mid October ticket" not in september.text
+    assert "Halloween late ticket" not in september.text
+
+
+def test_a_year_range_uses_local_year_boundaries(client, sessions):
+    """00:30 on 1 January locally is still 31 December in UTC."""
+    db = sessions()
+    user = db.scalar(select(User).where(User.username == "l2"))
+    seed_at(db, user, "New year ticket", local_to_utc(2026, 1, 1, 0, 30))
+    db.close()
+
+    sign_in(client)
+    assert "New year ticket" in client.get("/alerts/?from=2026&to=2026").text
+    assert "New year ticket" not in client.get("/alerts/?from=2025&to=2025").text
+
+
+def test_the_form_switches_inputs_to_the_period_in_the_url(client, sessions):
+    db = sessions()
+    user = db.scalar(select(User).where(User.username == "l2"))
+    seed_alert(db, user, "Granularity ticket")
+    db.close()
+
+    sign_in(client)
+    month = client.get("/?from=2026-10&to=2026-10")
+    assert 'type="month"' in month.text
+    assert 'value="2026-10"' in month.text
+    assert '<option value="month" selected' in month.text
+
+    year = client.get("/?from=2026&to=2026")
+    assert 'type="number"' in year.text
+    assert 'value="2026"' in year.text
+    assert '<option value="year" selected' in year.text
+
+    day = client.get("/?from=2026-10-20")
+    assert 'type="date"' in day.text
+    assert '<option value="day" selected' in day.text
+
+
 def test_the_form_renders_the_calendar_inputs(client, sessions):
     db = sessions()
     user = db.scalar(select(User).where(User.username == "l2"))

@@ -843,8 +843,8 @@ body.lightbox-open {
 .date-field {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 0.8rem;
+  gap: 4px;
+  font-size: 0.74rem;
   font-weight: 700;
   color: var(--muted);
 }
@@ -852,15 +852,56 @@ body.lightbox-open {
 .date-field input[type="date"] {
   flex: 0 0 auto;
   min-width: 0;
-  width: 124px;
-  padding: 7px 6px;
-  font-size: 0.82rem;
+  width: 112px;
+  padding: 7px 4px;
+  font-size: 0.8rem;
   font-weight: 500;
 }
 
 /* The search box is the only elastic control in the row; without a smaller
    basis the Filter button drops to a second line once the dates are added. */
 .filters input[name="q"] {
-  flex: 1 1 260px;
-  min-width: 200px;
+  flex: 1 1 210px;
+  min-width: 180px;
+}
+
+/* The dropdowns were sized by their longest option; capping them gives the
+   search box the room it needs on one line. */
+.filters select {
+  max-width: 158px;
+}
+
+/* A year is four digits; the field does not need to be a calendar wide. */
+.date-field input[type="number"] {
+  width: 78px;
+  text-align: center;
+  -moz-appearance: textfield;
+}
+
+.date-field input[type="month"] {
+  width: 128px;
+}
+
+/* The granularity switch sits with the fields it changes. */
+.filters select[data-date-unit] {
+  flex: 0 0 auto;
+  font-weight: 600;
+}
+
+/* Names the granularity selector so it does not read as another filter. */
+.date-legend {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-right: -6px;
+}
+
+/* From and To are one control, so they wrap together instead of stranding the
+   second field on a line of its own. */
+.date-pair {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }

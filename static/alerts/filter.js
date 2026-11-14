@@ -16,11 +16,31 @@
   function buildUrl() {
     const params = new URLSearchParams();
     new FormData(form).forEach((value, key) => {
+      // The granularity is inferred from the value itself, so it stays out of
+      // the URL and a link stays readable: ?from=2026-10&to=2026-10.
+      if (key === "unit") return;
       const text = String(value).trim();
       if (text) params.append(key, text);
     });
     const query = params.toString();
     return location.pathname + (query ? "?" + query : "");
+  }
+
+  function applyDateType(type) {
+    form.querySelectorAll("input[name='from'], input[name='to']").forEach((input) => {
+      input.type = type;
+      input.value = "";
+      input.dataset.autofilled = "";
+      if (type === "number") {
+        input.min = "2000";
+        input.max = "2100";
+        input.step = "1";
+        input.placeholder = "2026";
+      } else {
+        ["min", "max", "step"].forEach((name) => input.removeAttribute(name));
+        input.placeholder = "";
+      }
+    });
   }
 
   function syncRangePills() {
@@ -65,9 +85,49 @@
     refresh(buildUrl());
   });
 
+  function syncPartner(input) {
+    // Picking a period in one field fills the other with the same period, so a
+    // month or a year is one click rather than two. A value the user typed
+    // themselves is kept — only an auto-filled partner is replaced, and the two
+    // bounds are always kept in order.
+    const other = form.querySelector(input.name === "from" ? "input[name='to']" : "input[name='from']");
+    if (!other || !input.value) return;
+    const autofilled = other.dataset.autofilled === "1";
+    if (!other.value || autofilled) {
+      other.value = input.value;
+      other.dataset.autofilled = "1";
+      return;
+    }
+    if (input.name === "from" && other.value < input.value) {
+      other.value = input.value;
+    } else if (input.name === "to" && other.value > input.value) {
+      other.value = input.value;
+    }
+  }
+
   form.addEventListener("change", (event) => {
-    if (event.target.matches("select, input[type='date']")) refresh(buildUrl());
+    // Day, month and year all share the two fields; the input type is what
+    // changes, so the same change event covers all three.
+    if (event.target.matches("select:not([data-date-unit]), input[name='from'], input[name='to']")) {
+      if (event.target.name === "from" || event.target.name === "to") {
+        // This field was edited by hand, so it is no longer ours to overwrite.
+        event.target.dataset.autofilled = "";
+        syncPartner(event.target);
+      }
+      refresh(buildUrl());
+    }
   });
+
+  const unitSelect = form.querySelector("[data-date-unit]");
+  if (unitSelect) {
+    unitSelect.addEventListener("change", () => {
+      const type = { day: "date", month: "month", year: "number" }[unitSelect.value] || "date";
+      applyDateType(type);
+      // The old value was written at a different granularity, so it is dropped
+      // rather than reinterpreted: 20 Oct as a year means nothing.
+      refresh(buildUrl());
+    });
+  }
 
   form.addEventListener("input", (event) => {
     if (!event.target.matches("input[name='q']")) return;
@@ -81,8 +141,9 @@
     if (clear) {
       event.preventDefault();
       form.querySelector("input[name='q']").value = "";
-      form.querySelectorAll("select").forEach((select) => { select.value = ""; });
-      form.querySelectorAll("input[type='date']").forEach((input) => { input.value = ""; });
+      form.querySelectorAll("select:not([data-date-unit])").forEach((select) => { select.value = ""; });
+      if (unitSelect) unitSelect.value = "day";
+      applyDateType("date");
       refresh(location.pathname);
       return;
     }
