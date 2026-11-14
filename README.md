@@ -51,6 +51,26 @@ The current local review database has these demo accounts. They are not automati
 
 Change the shared demo password after signing in. Do not use it outside this localhost demo.
 
+### One command, Postgres included
+
+`scripts/demo_local.py` starts a local Postgres, migrates it, copies the demo
+tickets in, takes a snapshot and starts the app with four workers:
+
+```bash
+pip install -r requirements-dev.txt   # adds pgserver, a bundled Postgres
+.venv/bin/python scripts/demo_local.py start
+.venv/bin/python scripts/demo_local.py status
+.venv/bin/python scripts/demo_local.py stop
+```
+
+It prints the URL and the review accounts when it is ready, and everything it
+creates lives in `~/.local/share/soc-tracker-demo` (override with
+`DEMO_STATE_DIR`), so stopping and starting keeps the tickets. The Postgres
+there is a development bundle, not a server to run in production; it is only
+there so the demo exercises the same SQL as production. Postgres refuses to
+initialise a cluster on a Windows drvfs mount such as `/mnt/d` under WSL, which
+is why the state directory is outside the repository.
+
 ## Quick start (Docker)
 
 ```bash

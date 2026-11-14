@@ -4,4 +4,6 @@
 pytest>=9.0.3,<10.0
 pytest-asyncio>=1.0,<2.0
 fakeredis>=2.20,<3.0
+# Bundled Postgres for scripts/demo_local.py and the Postgres test run.
+pgserver>=0.1,<1.0
 pip-audit>=2.7,<3.0
