@@ -6,7 +6,7 @@
 ![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)
 
 
-A lightweight, self-hosted security operations alert tracker built with FastAPI. Designed for SOC teams that need role-based alert management, Elastic SIEM integration, and n8n workflow automation — without vendor lock-in.
+A lightweight, self-hosted security operations alert tracker built with FastAPI. Designed for SOC teams that need role-based alert management and a straightforward way to bring Elastic SIEM alerts in — without vendor lock-in.
 
 ## Quick start (local Python demo)
 
@@ -259,40 +259,12 @@ Paste raw Elastic alert JSON directly into the tracker. Supported shapes:
 
 The parser extracts title, description, source, severity, asset, MITRE tactic, and IOCs automatically.
 
-### n8n webhook integration
-
-Off by default. Set `N8N_API_KEY` and the two endpoints below accept posts carrying that key in the `X-API-Key` header; with no key they answer `503 webhook disabled`, so nothing is ever ingested anonymously.
-
-Push alerts from n8n workflows:
-
-```bash
-curl -X POST http://localhost:8080/api/webhook/n8n/ \
-  -H "X-API-Key: <your-key>" \
-  -H "Content-Type: application/json" \
-  -d '{"title":"Brute force detected","severity":"High","source":"n8n"}'
-```
-
-Push enrichment logs into an existing alert:
-
-```bash
-curl -X POST http://localhost:8080/api/webhook/n8n/logs/ \
-  -H "X-API-Key: <your-key>" \
-  -H "Content-Type: application/json" \
-  -d '{"alert_id":"#1","message":"GeoIP lookup completed.","workflow":"SOC enrichment"}'
-```
-
-Deliveries are idempotent: when a payload carries an Elastic `_id` (or an
-`external_id`), a retry returns the ticket that already exists instead of
-creating a second one. The response lists `created`, `existing`, and the combined
-`ids`, so a workflow can tell a first delivery from a replay.
-
 ## Configuration
 
 All settings are controlled via environment variables. See `.env.example` for the full list.
 
 | Variable                 | Required | Default                | Description                              |
 |--------------------------|----------|------------------------|------------------------------------------|
-| `N8N_API_KEY`            | No       | unset (ingest off)     | Enables the n8n ingest endpoints         |
 | `APP_SECRET_KEY`         | Yes*     | auto-generated         | Cookie signing key (must persist)        |
 | `SQLITE_PATH`            | No       | `data/fastapi.sqlite3` | SQLite database path                     |
 | `COOKIE_SECURE`          | No       | `0`                    | Set to `1` for HTTPS-only cookies        |
@@ -377,17 +349,17 @@ The suite runs on SQLite in-memory. The Postgres path has its own module:
 TEST_DATABASE_URL=postgresql://user:pass@host/scratch_db pytest tests/test_postgres.py
 ```
 
-It drops and recreates the `public` schema, runs the real migrations to head, and drives a ticket round trip, a close with audit rows, and webhook deduplication. Point it at a scratch database only.
+It drops and recreates the `public` schema, runs the real migrations to head, and drives a ticket round trip, a close with audit rows, and import deduplication. Point it at a scratch database only.
 
 ## Future improvements
 
-- ~~Automated tests for alert workflows, role permissions, imports, and webhooks~~ ✅ Done
+- ~~Automated tests for alert workflows, role permissions, and imports~~ ✅ Done
 - ~~Dashboard date-range filters~~ ✅ Done (trend charts still open)
 - ~~SLA tracking with breach history~~ ✅ Done
 - ~~External integrations for notifications~~ ✅ Done (email and Teams)
 - Trend charts for weekly and monthly reporting
 - Evidence tagging and per-evidence retention
-- API documentation page with example payloads for n8n and Elastic imports
+- API documentation page with example payloads for Elastic imports
 - OpenTelemetry traces for slow dashboard queries at scale
 
 ## Contributing

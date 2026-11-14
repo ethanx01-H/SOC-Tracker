@@ -1,13 +1,12 @@
 """SOC Alert Tracker - FastAPI Application Entry Point.
 
 A lightweight, self-hosted security operations alert tracker with role-based
-alert management, Elastic SIEM integration, and n8n workflow automation.
+alert management and Elastic SIEM import.
 """
 
 import logging
 import os
-from fastapi import FastAPI, Request
-from fastapi.exceptions import RequestValidationError
+from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect
@@ -15,7 +14,7 @@ from sqlalchemy import inspect
 from soc_tracker.config import ALEMBIC_HEAD, BASE_DIR, DATABASE_URL, DB_IS_SQLITE, SQLITE_PATH, WEB_CONCURRENCY
 from soc_tracker.middleware import security_middleware
 from soc_tracker.models import Base, engine
-from soc_tracker.routes import auth_routes, alert_routes, admin_routes, evidence_routes, metrics_routes, webhook_routes
+from soc_tracker.routes import auth_routes, alert_routes, admin_routes, evidence_routes, metrics_routes, elastic_routes
 from soc_tracker.services import backup_status
 
 # Configure logging
@@ -39,15 +38,7 @@ app.include_router(alert_routes.router)
 app.include_router(admin_routes.router)
 app.include_router(evidence_routes.router)
 app.include_router(metrics_routes.router)
-app.include_router(webhook_routes.router)
-
-
-@app.exception_handler(RequestValidationError)
-def handle_validation_error(request: Request, exc: RequestValidationError):
-    """Keep the webhook contract: malformed JSON is a 400, not FastAPI's 422."""
-    if request.url.path.startswith("/api/webhook"):
-        return JSONResponse({"ok": False, "error": "invalid json body"}, status_code=400)
-    return JSONResponse({"detail": exc.errors()}, status_code=422)
+app.include_router(elastic_routes.router)
 
 
 @app.get("/healthz", include_in_schema=False)

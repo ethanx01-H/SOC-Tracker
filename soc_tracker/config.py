@@ -33,12 +33,6 @@ DB_POOL_SIZE = int(os.environ.get("DB_POOL_SIZE", "10"))
 DB_POOL_MAX_OVERFLOW = int(os.environ.get("DB_POOL_MAX_OVERFLOW", "20"))
 WEB_CONCURRENCY = int(os.environ.get("WEB_CONCURRENCY", "1"))
 APP_ENV = os.environ.get("APP_ENV", "development").lower()
-# n8n ingest is off unless a key is supplied. Production no longer requires one:
-# an instance with no automation wired up should not have to carry a secret for
-# an endpoint nobody calls, and a webhook without a key would accept anything.
-N8N_API_KEY = os.environ.get("N8N_API_KEY") or ""
-N8N_API_HEADER = os.environ.get("N8N_API_HEADER", "X-API-Key")
-WEBHOOK_ENABLED = bool(N8N_API_KEY)
 SECRET_KEY = os.environ.get("APP_SECRET_KEY") or (None if APP_ENV == "production" else secrets.token_hex(32))
 if APP_ENV == "production" and (not SECRET_KEY or len(SECRET_KEY) < 32):
     raise RuntimeError("Production requires APP_SECRET_KEY of at least 32 characters.")

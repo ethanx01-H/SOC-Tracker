@@ -3,6 +3,8 @@
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -535,3 +537,18 @@ def test_teams_delivery_posts_a_message_card(monkeypatch):
     assert sent["url"] == "https://teams.example/hook"
     assert sent["json"]["title"] == "Subject"
     assert sent["json"]["@type"] == "MessageCard"
+
+
+def test_elastic_import_page_moved_without_breaking(client, db):
+    """The ingest routes moved out of webhook_routes; the paste page still works."""
+    token = sign_in(client)
+    page = client.get("/elastic/import/")
+    assert page.status_code == 200
+    assert "Elastic" in page.text
+
+    payload = json.dumps({"hits": {"hits": [
+        {"_index": "logs", "_id": "moved-1", "_source": {"kibana.alert.rule.name": "Moved import"}}
+    ]}})
+    response = client.post("/elastic/import/", data={"raw_json": payload, "csrf_token": token})
+    assert response.status_code == 303
+    assert db.query(Alert).filter(Alert.external_id == "logs:moved-1").count() == 1

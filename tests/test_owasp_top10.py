@@ -439,13 +439,13 @@ class TestA10SSRF:
         })
         assert response.status_code in [200, 303]
 
-    def test_webhook_requires_api_key(self, client):
-        response = client.post("/api/webhook/n8n/", json={"title": "Test", "severity": "High"})
-        assert response.status_code == 401
-
-    def test_webhook_rejects_invalid_key(self, client):
-        response = client.post("/api/webhook/n8n/", json={"title": "Test", "severity": "High"}, headers={"X-API-Key": "invalid"})
-        assert response.status_code == 401
+    def test_there_is_no_inbound_api(self, client, db):
+        """The n8n endpoints are gone: nothing ingests without a signed-in analyst."""
+        for path in ("/api/webhook/n8n", "/api/webhook/n8n/", "/api/webhook/n8n/logs/"):
+            response = client.post(path, json={"title": "Test", "severity": "High"}, headers={"X-API-Key": "anything"})
+            # Refused by the CSRF guard before routing, or not routed at all.
+            assert response.status_code in {403, 404}, f"{path} answered {response.status_code}"
+        assert db.query(Alert).count() == 0
 
 
 # ============================================================================

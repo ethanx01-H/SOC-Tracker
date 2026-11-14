@@ -53,7 +53,7 @@
     <div><strong>Asset:</strong>&nbsp;<span>{{ alert.asset }}</span></div>
     <div><strong>MITRE tactic:</strong>&nbsp;<span>{{ alert.tactic }}</span></div>
     <div><strong>SLA:</strong>&nbsp;<span>{{ alert.sla_hours }} hours</span></div>
-    <div><strong>Created by:</strong>&nbsp;<span>{{ alert.created_by or "Webhook" }}</span></div>
+    <div><strong>Created by:</strong>&nbsp;<span>{{ alert.created_by or "System" }}</span></div>
     <div><strong>Escalated by:</strong>&nbsp;<span>{{ alert.escalated_by or "-" }}</span></div>
   </div>
   {% if can_assign and assignable_users %}
@@ -193,9 +193,6 @@
             <p class="muted">Assigned to {{ event.assigned_to }}{% if event.actor %} by {{ event.actor }}{% endif %}</p>
           {% elif event.actor %}
             <p class="muted">By {{ event.actor }}</p>
-          {% endif %}
-          {% if event.source == "n8n" %}
-            <span class="pill">n8n</span>
           {% endif %}
         </article>
       {% else %}

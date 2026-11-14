@@ -178,17 +178,28 @@ def test_close_and_audit_trail(client, pg_sessions, pg_engine):
     assert audit_rows == 1
 
 
-def test_webhook_deduplicates_on_postgres(client, pg_engine):
-    from soc_tracker.config import N8N_API_HEADER, N8N_API_KEY
+def test_import_deduplicates_on_postgres(pg_engine, pg_sessions):
+    """A repeated Elastic export must map to the ticket it already created."""
+    from alerts.elastic import parse_elastic_alerts
+    from soc_tracker.services.alert_service import create_or_get_alert
 
-    payload = {"_id": "pg-doc-1", "alert_name": "Postgres webhook alert", "severity": "Medium"}
-    headers = {N8N_API_HEADER: N8N_API_KEY}
-    first = client.post("/api/webhook/n8n", json=payload, headers=headers)
-    second = client.post("/api/webhook/n8n", json=payload, headers=headers)
-    assert first.status_code == 200, first.text
-    assert second.status_code == 200, second.text
-    assert first.json()["created"] == second.json()["existing"]
+    raw = '{"hits": {"hits": [{"_index": "logs", "_id": "pg-doc-1", "_source": {"alert_name": "Postgres import alert"}}]}}'
+
+    def import_once():
+        session = pg_sessions()
+        try:
+            first, created = create_or_get_alert(session, dict(parse_elastic_alerts(raw)[0]))
+            session.commit()
+            return first.alert_id, created
+        finally:
+            session.close()
+
+    first_id, first_created = import_once()
+    second_id, second_created = import_once()
+    assert first_created is True
+    assert second_created is False
+    assert first_id == second_id
     with pg_engine.connect() as connection:
         assert connection.exec_driver_sql(
-            "select count(*) from fastapi_alerts where external_id = 'pg-doc-1'"
+            "select count(*) from fastapi_alerts where external_id = 'logs:pg-doc-1'"
         ).scalar() == 1

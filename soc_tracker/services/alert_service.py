@@ -127,7 +127,7 @@ def create_alert(db: Session, values: dict, user: User | None = None, *, source:
         alert=alert,
         event_type="created",
         actor=actor,
-        message=f"{actor.username if actor else 'n8n'} created {alert.alert_id}.",
+        message=f"{actor.username if actor else 'system'} created {alert.alert_id}.",
         source=source,
         payload_json=json.dumps(payload)[:100000] if payload is not None else "{}",
     ))
@@ -139,8 +139,8 @@ def create_alert(db: Session, values: dict, user: User | None = None, *, source:
 def create_or_get_alert(db: Session, values: dict, user: User | None = None, *, source: str = "tracker", payload: dict | None = None) -> tuple[Alert, bool]:
     """Create an alert, or return the existing one for a repeated external id.
 
-    n8n and Elastic retry on timeout, so without this a flaky webhook turns a
-    single detection into several tickets. Returns (alert, created).
+    A pasted Elastic export is often imported twice, so without this a second
+    import turns one detection into several tickets. Returns (alert, created).
     """
     external_id = values.get("external_id")
     if external_id:

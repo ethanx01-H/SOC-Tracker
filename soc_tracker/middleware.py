@@ -65,8 +65,9 @@ async def security_middleware(request: Request, call_next):
                 headers={"Retry-After": str(RATE_LIMIT_WINDOW)},
             )
 
-    # CSRF check — skip only for webhook API endpoints
-    if request.method in {"POST", "PUT", "PATCH", "DELETE"} and not path.startswith("/api/webhook"):
+    # CSRF check. With no inbound API left, every state change is a form post
+    # made by a signed-in browser, so every one of them is checked.
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
         cookie_token = request.cookies.get("csrf_token")
         header_token = request.headers.get("X-CSRF-Token")
         form_token = None
