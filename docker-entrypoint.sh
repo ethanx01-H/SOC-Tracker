@@ -4,7 +4,7 @@ set -eu
 BACKUP_DIR=${BACKUP_DIR:-/app/backups}
 
 # Snapshot the database before anything else touches it. pg_dump writes
-# soc-pg-<stamp>.dump; if the client is missing the script says so and exits 0,
+# sentriq-pg-<stamp>.dump; if the client is missing the script says so and exits 0,
 # because the database host's own backups still count.
 if [ -f /app/scripts/backup-postgres.sh ]; then
     sh /app/scripts/backup-postgres.sh "$BACKUP_DIR" "${BACKUP_KEEP:-20}" "${BACKUP_MIN_INTERVAL:-300}" \

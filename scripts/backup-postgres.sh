@@ -28,7 +28,7 @@ url=$(printf '%s' "$DATABASE_URL" | sed 's/^postgresql+psycopg2*:/postgresql:/; 
 
 mkdir -p "$BACKUP_DIR"
 
-newest=$(ls -1t "$BACKUP_DIR"/soc-pg-*.dump 2>/dev/null | head -n 1 || true)
+newest=$(ls -1t "$BACKUP_DIR"/sentriq-pg-*.dump 2>/dev/null | head -n 1 || true)
 if [ -n "$newest" ]; then
     age=$(( $(date +%s) - $(date -r "$newest" +%s) ))
     if [ "$age" -lt "$MIN_INTERVAL" ]; then
@@ -38,7 +38,7 @@ if [ -n "$newest" ]; then
 fi
 
 stamp=$(date -u +%Y%m%d-%H%M%S)
-target="$BACKUP_DIR/soc-pg-$stamp.dump"
+target="$BACKUP_DIR/sentriq-pg-$stamp.dump"
 partial="$target.part"
 
 if ! pg_dump --format=custom --no-owner --no-privileges --file="$partial" "$url"; then
@@ -59,9 +59,9 @@ mv "$partial" "$target"
 echo "backup-postgres: wrote $target"
 
 # Keep the newest $KEEP dumps.
-count=$(ls -1 "$BACKUP_DIR"/soc-pg-*.dump 2>/dev/null | wc -l | tr -d ' ')
+count=$(ls -1 "$BACKUP_DIR"/sentriq-pg-*.dump 2>/dev/null | wc -l | tr -d ' ')
 if [ "$count" -gt "$KEEP" ]; then
-    ls -1t "$BACKUP_DIR"/soc-pg-*.dump | tail -n "+$((KEEP + 1))" | while read -r old; do
+    ls -1t "$BACKUP_DIR"/sentriq-pg-*.dump | tail -n "+$((KEEP + 1))" | while read -r old; do
         rm -f "$old"
         echo "backup-postgres: removed $old"
     done

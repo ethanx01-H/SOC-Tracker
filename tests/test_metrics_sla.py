@@ -81,8 +81,8 @@ def test_backup_status_flags_a_missing_snapshot(tmp_path):
 
 
 def test_backup_status_measures_the_newest_snapshot(tmp_path):
-    old = tmp_path / "soc-pg-20260101-000000.dump"
-    new = tmp_path / "soc-pg-20260102-000000.dump"
+    old = tmp_path / "sentriq-pg-20260101-000000.dump"
+    new = tmp_path / "sentriq-pg-20260102-000000.dump"
     old.write_bytes(b"x")
     new.write_bytes(b"yy")
     ten_hours_ago = time.time() - 10 * 3600
@@ -98,7 +98,7 @@ def test_backup_status_measures_the_newest_snapshot(tmp_path):
 
 
 def test_backup_status_flags_a_stale_snapshot(tmp_path):
-    path = tmp_path / "soc-pg-20260101-000000.dump"
+    path = tmp_path / "sentriq-pg-20260101-000000.dump"
     path.write_bytes(b"x")
     long_ago = time.time() - 72 * 3600
     os.utime(path, (long_ago, long_ago))
@@ -168,7 +168,7 @@ def test_healthz_reports_backup_freshness(sessions, tmp_path, monkeypatch):
     from main import app
     from sentriq.services import backup_status as backup_module
 
-    snapshot = tmp_path / "soc-pg-20260101-000000.dump"
+    snapshot = tmp_path / "sentriq-pg-20260101-000000.dump"
     snapshot.write_bytes(b"x")
     monkeypatch.setattr(backup_module, "BACKUP_DIR", tmp_path)
 
@@ -180,9 +180,9 @@ def test_healthz_reports_backup_freshness(sessions, tmp_path, monkeypatch):
 
 
 def test_backup_status_ignores_sqlite_snapshots(tmp_path):
-    """A leftover soc-data archive is not a backup of this database."""
-    (tmp_path / "soc-data-20260101T000000Z.tar.gz").write_bytes(b"old sqlite snapshot")
-    dump = tmp_path / "soc-pg-20260102-000000.dump"
+    """A stray file with the wrong prefix is not a backup of this database."""
+    (tmp_path / "sentriq-data-20260101T000000Z.tar.gz").write_bytes(b"old sqlite snapshot")
+    dump = tmp_path / "sentriq-pg-20260102-000000.dump"
     dump.write_bytes(b"custom-format dump")
     just_now = time.time() - 60
     os.utime(dump, (just_now, just_now))

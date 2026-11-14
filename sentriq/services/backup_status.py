@@ -1,7 +1,7 @@
 """Backup freshness, for /healthz and /metrics.
 
-The snapshot scripts write ``soc-data-<stamp>.tar.gz`` for SQLite and
-``soc-pg-<stamp>.dump`` for Postgres; nothing used to check that they kept doing
+The snapshot scripts write ``sentriq-data-<stamp>.tar.gz`` for SQLite and
+``sentriq-pg-<stamp>.dump`` for Postgres; nothing used to check that they kept doing
 so, which is how a backup job dies quietly for a month. This module is the
 check: newest snapshot, its age, and whether that age crosses the configured
 threshold.
@@ -20,7 +20,7 @@ def snapshots(directory: Path | None = None) -> list[Path]:
     folder = Path(directory or BACKUP_DIR)
     if not folder.is_dir():
         return []
-    return sorted(folder.glob("soc-pg-*.dump"), key=lambda path: path.stat().st_mtime, reverse=True)
+    return sorted(folder.glob("sentriq-pg-*.dump"), key=lambda path: path.stat().st_mtime, reverse=True)
 
 
 def status(directory: Path | None = None, max_age_hours: int = BACKUP_MAX_AGE_HOURS) -> dict:
@@ -56,7 +56,7 @@ def warn_if_stale(directory: Path | None = None) -> None:
     info = status(directory)
     if info["count"] == 0:
         logger.warning(
-            "No Postgres snapshot (soc-pg-*.dump) in %s. Run scripts/backup-postgres.sh, "
+            "No Postgres snapshot (sentriq-pg-*.dump) in %s. Run scripts/backup-postgres.sh, "
             "or back the database up on its own host.",
             info["directory"],
         )

@@ -111,7 +111,7 @@ dump never looks like a usable snapshot. To restore one into a fresh database:
 
 ```bash
 docker compose exec -T postgres createdb -U sentriq sentriq_restore
-pg_restore --no-owner --no-privileges -d "postgresql://sentriq:***@localhost:5432/sentriq_restore" backups/soc-pg-YYYYmmdd-HHMMSS.dump
+pg_restore --no-owner --no-privileges -d "postgresql://sentriq:***@localhost:5432/sentriq_restore" backups/sentriq-pg-YYYYmmdd-HHMMSS.dump
 ```
 
 For a nightly snapshot while the stack is running, use the host scheduler. Linux or WSL
@@ -221,7 +221,7 @@ Measured on 5,000 tickets, four workers, ten concurrent page loads: Postgres p95
 
 ### Backing up Postgres
 
-`scripts/backup-postgres.sh` writes `backups/soc-pg-<stamp>.dump` with
+`scripts/backup-postgres.sh` writes `backups/sentriq-pg-<stamp>.dump` with
 `pg_dump --format=custom`, keeps the newest 20, and checks each dump with
 `pg_restore --list` before renaming it into place, so a failed dump never looks
 like a usable snapshot. The container runs it at startup; for a schedule you can
@@ -234,10 +234,10 @@ point at, use cron on the host:
 Restore into a fresh database:
 
 ```bash
-pg_restore --no-owner --no-privileges -d "$DATABASE_URL" backups/soc-pg-YYYYmmdd-HHMMSS.dump
+pg_restore --no-owner --no-privileges -d "$DATABASE_URL" backups/sentriq-pg-YYYYmmdd-HHMMSS.dump
 ```
 
-`/healthz` and `/metrics` report the newest `soc-pg-*.dump` and go degraded when
+`/healthz` and `/metrics` report the newest `sentriq-pg-*.dump` and go degraded when
 there is none or the newest is older than `BACKUP_MAX_AGE_HOURS`.
 If `pg_dump` is not installed, the startup log says so plainly rather than
 pretending the database is being backed up.
