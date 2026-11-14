@@ -23,6 +23,18 @@
     return location.pathname + (query ? "?" + query : "");
   }
 
+  function syncRangePills() {
+    // The pills live outside the swapped container, so their highlight has to be
+    // corrected here: otherwise "All time" stays lit while a date range is active.
+    const params = new URLSearchParams(location.search);
+    const custom = params.get("from") || params.get("to");
+    const range = custom ? null : (params.get("range") || "all");
+    document.querySelectorAll(".range-pill").forEach((pill) => {
+      const value = new URL(pill.getAttribute("href"), location.origin).searchParams.get("range");
+      pill.classList.toggle("active", !custom && value === range);
+    });
+  }
+
   async function refresh(url) {
     if (controller) controller.abort();
     controller = new AbortController();
@@ -36,6 +48,7 @@
       if (!response.ok) throw new Error("HTTP " + response.status);
       results.innerHTML = await response.text();
       history.replaceState(null, "", url);
+      syncRangePills();
       document.dispatchEvent(new CustomEvent("alerts:refreshed"));
     } catch (error) {
       if (error.name === "AbortError") return;
@@ -53,7 +66,7 @@
   });
 
   form.addEventListener("change", (event) => {
-    if (event.target.matches("select")) refresh(buildUrl());
+    if (event.target.matches("select, input[type='date']")) refresh(buildUrl());
   });
 
   form.addEventListener("input", (event) => {
@@ -69,6 +82,7 @@
       event.preventDefault();
       form.querySelector("input[name='q']").value = "";
       form.querySelectorAll("select").forEach((select) => { select.value = ""; });
+      form.querySelectorAll("input[type='date']").forEach((input) => { input.value = ""; });
       refresh(location.pathname);
       return;
     }

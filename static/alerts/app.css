@@ -837,3 +837,30 @@ body.lightbox-open {
 .table.no-bulk .table-row {
   grid-template-columns: 120px minmax(220px, 1fr) 100px 120px 120px 120px 120px;
 }
+
+/* Calendar inputs sit in the same row as the other filters, so they stay
+   compact and take the browser's own picker. */
+.date-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.date-field input[type="date"] {
+  flex: 0 0 auto;
+  min-width: 0;
+  width: 124px;
+  padding: 7px 6px;
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+/* The search box is the only elastic control in the row; without a smaller
+   basis the Filter button drops to a second line once the dates are added. */
+.filters input[name="q"] {
+  flex: 1 1 260px;
+  min-width: 200px;
+}

@@ -6,16 +6,17 @@ import json
 import logging
 import math
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from typing import Mapping
 from urllib.parse import urlencode
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ..config import SEVERITIES, STATUSES, UPLOAD_DIR
+from ..config import DISPLAY_TIMEZONE, SEVERITIES, STATUSES, UPLOAD_DIR
 from ..models import Alert, AlertEvent, Evidence, User
 
 logger = logging.getLogger("soc_tracker.alert_service")
@@ -34,6 +35,37 @@ RANGE_CHOICES = (
     ("90d", "Last 90 days"),
     ("all", "All time"),
 )
+
+DISPLAY_TZ = ZoneInfo(DISPLAY_TIMEZONE)
+
+
+def _parse_day(raw: str) -> date | None:
+    try:
+        return date.fromisoformat(raw.strip())
+    except (AttributeError, ValueError):
+        return None
+
+
+def custom_window(request) -> tuple[datetime | None, datetime | None]:
+    """Turn the calendar inputs into naive-UTC bounds.
+
+    A picked date means that day where the analyst sits, so the boundaries are
+    built in the display timezone and converted: without this, "1 November" in
+    Asia/Yangon would start six and a half hours early and quietly include
+    tickets from the previous afternoon. The upper bound is exclusive (midnight
+    after the chosen day) so the whole final day is included.
+    """
+    start_day = _parse_day(request.query_params.get("from") or "")
+    end_day = _parse_day(request.query_params.get("to") or "")
+    if start_day and end_day and end_day < start_day:
+        start_day, end_day = end_day, start_day
+    start = end = None
+    if start_day:
+        start = datetime.combine(start_day, time.min, tzinfo=DISPLAY_TZ).astimezone(timezone.utc).replace(tzinfo=None)
+    if end_day:
+        following = end_day + timedelta(days=1)
+        end = datetime.combine(following, time.min, tzinfo=DISPLAY_TZ).astimezone(timezone.utc).replace(tzinfo=None)
+    return start, end
 
 
 def create_alert(db: Session, values: dict, user: User | None = None, *, source: str = "tracker", payload: dict | None = None) -> Alert:
@@ -140,7 +172,15 @@ def filtered_alerts(db: Session, request) -> list[Alert]:
     sla = request.query_params.get("sla") or ""
     window = (request.query_params.get("range") or "").strip().lower()
 
-    if window in RANGE_WINDOWS:
+    # Calendar dates win over the preset windows: an analyst who picks both is
+    # narrowing the window they just clicked, not asking for a union.
+    start, end = custom_window(request)
+    if start or end:
+        if start:
+            query = query.where(Alert.created_at >= start)
+        if end:
+            query = query.where(Alert.created_at < end)
+    elif window in RANGE_WINDOWS:
         cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - RANGE_WINDOWS[window]
         query = query.where(Alert.created_at >= cutoff)
 

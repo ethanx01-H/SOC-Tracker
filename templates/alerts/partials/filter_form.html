@@ -1,5 +1,5 @@
 <form method="get" class="filters" data-filter-form>
-  {% if active_range and active_range != 'all' %}
+  {% if active_range and active_range != 'all' and not (date_from or date_to) %}
     <input type="hidden" name="range" value="{{ active_range }}">
   {% endif %}
   <input name="q" value="{{ request.query_params.get('q', '') }}" placeholder="Search alert, asset, IOC, analyst" autocomplete="off" spellcheck="false" aria-label="Search alerts">
@@ -15,5 +15,13 @@
       <option value="{{ status }}" {% if request.query_params.get('status') == status %}selected{% endif %}>{{ status }}</option>
     {% endfor %}
   </select>
+  <label class="date-field" title="Show tickets filed on or after this date">
+    <span>From</span>
+    <input type="date" name="from" value="{{ date_from }}" aria-label="From date">
+  </label>
+  <label class="date-field" title="Show tickets filed on or before this date">
+    <span>To</span>
+    <input type="date" name="to" value="{{ date_to }}" aria-label="To date">
+  </label>
   <button type="submit">Filter</button>
 </form>

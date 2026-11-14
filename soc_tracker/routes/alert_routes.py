@@ -65,7 +65,8 @@ def dashboard(request: Request, db: Session = Depends(get_db), user: User = Depe
         "counts": counts,
         "charts": chart_counts(alerts),
         "ranges": RANGE_CHOICES,
-        "active_range": (request.query_params.get("range") or "all").lower(),
+        # A calendar range replaces the preset window, so no pill stays lit.
+        "active_range": "" if (request.query_params.get("from") or request.query_params.get("to")) else (request.query_params.get("range") or "all").lower(),
         # The dashboard is for reading the queue; bulk editing belongs on the
         # queue page where the rows are the working set.
         "bulk_actions": False,

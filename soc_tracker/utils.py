@@ -104,6 +104,8 @@ def base_context(request: Request, user: User | None, db: Session) -> dict:
         "sla_status": sla_status,
         "display_timezone": timezone_label(),
         "csrf_token": csrf_token_for(request),
+        "date_from": request.query_params.get("from", ""),
+        "date_to": request.query_params.get("to", ""),
     }
 
 

@@ -1,6 +1,7 @@
 """Dashboard ranges, bulk actions, duplicate merging, and notifications."""
 
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import pytest
 from fastapi.testclient import TestClient
@@ -8,6 +9,7 @@ from sqlalchemy import select
 
 from soc_tracker import models
 from soc_tracker.auth import hash_password
+from soc_tracker.config import DISPLAY_TIMEZONE
 from soc_tracker.models import Alert, AlertEvent, AuditLog, Evidence, User
 from soc_tracker.services import merge_service, notify
 from soc_tracker.services.alert_service import create_alert
@@ -78,6 +80,87 @@ def test_dashboard_range_hides_older_tickets(client, sessions):
     everything = client.get("/?range=all")
     assert "Old ticket" in everything.text
     assert token
+
+
+def seed_at(db, user, title, when):
+    alert = create_alert(db, {
+        "title": title, "description": "", "severity": "High", "asset": "DATE-01",
+        "tactic": "Execution", "iocs": [], "sla_hours": 8,
+    }, user)
+    alert.created_at = when
+    db.commit()
+    return alert
+
+
+def local_to_utc(*args):
+    """A local wall-clock moment in the team's timezone, as naive UTC."""
+    local = datetime(*args, tzinfo=ZoneInfo(DISPLAY_TIMEZONE))
+    return local.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def test_custom_date_range_uses_the_local_day(client, sessions):
+    """A picked date means that day where the analyst sits, not a UTC day."""
+    db = sessions()
+    user = db.scalar(select(User).where(User.username == "l2"))
+    # 00:30 on 2 November in the display zone — the previous day in UTC.
+    seed_at(db, user, "After midnight locally", local_to_utc(2026, 11, 2, 0, 30))
+    db.close()
+
+    sign_in(client)
+    inside = client.get("/alerts/?from=2026-11-02&to=2026-11-02")
+    assert "After midnight locally" in inside.text
+
+    outside = client.get("/alerts/?from=2026-11-01&to=2026-11-01")
+    assert "After midnight locally" not in outside.text
+
+
+def test_custom_range_wins_over_the_preset_window(client, sessions):
+    db = sessions()
+    user = db.scalar(select(User).where(User.username == "l2"))
+    seed_at(db, user, "Older ticket", local_to_utc(2026, 10, 1, 9, 0))
+    db.close()
+
+    sign_in(client)
+    # The 24h preset would exclude it; the dates say otherwise and dates win.
+    page = client.get("/alerts/?range=24h&from=2026-10-01&to=2026-10-01")
+    assert "Older ticket" in page.text
+
+
+def test_inverted_custom_range_is_read_as_a_window(client, sessions):
+    db = sessions()
+    user = db.scalar(select(User).where(User.username == "l2"))
+    seed_at(db, user, "Window ticket", local_to_utc(2026, 10, 5, 12, 0))
+    db.close()
+
+    sign_in(client)
+    page = client.get("/alerts/?from=2026-10-10&to=2026-10-01")
+    assert "Window ticket" in page.text
+
+
+def test_unparseable_dates_are_ignored(client, sessions):
+    db = sessions()
+    user = db.scalar(select(User).where(User.username == "l2"))
+    seed_alert(db, user, "Still visible")
+    db.close()
+
+    sign_in(client)
+    page = client.get("/alerts/?from=not-a-date&to=31-02-2026")
+    assert "Still visible" in page.text
+
+
+def test_the_form_renders_the_calendar_inputs(client, sessions):
+    db = sessions()
+    user = db.scalar(select(User).where(User.username == "l2"))
+    seed_alert(db, user, "Calendar ticket")
+    db.close()
+
+    sign_in(client)
+    page = client.get("/?from=2026-11-01&to=2026-11-13")
+    assert 'name="from"' in page.text
+    assert 'name="to"' in page.text
+    assert 'type="date"' in page.text
+    assert 'value="2026-11-01"' in page.text
+    assert 'value="2026-11-13"' in page.text
 
 
 def test_dashboard_partial_request_returns_only_the_results(client, sessions):
