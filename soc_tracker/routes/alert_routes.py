@@ -23,7 +23,9 @@ from ..dependencies import get_db
 from ..models import Alert, AlertEvent, Evidence, User
 from ..services.alert_service import (
     RANGE_CHOICES,
+    alert_query,
     create_alert,
+    dashboard_counts,
     export_csv,
     filtered_alerts,
     filtered_alerts_paginated,
@@ -31,7 +33,7 @@ from ..services.alert_service import (
     sla_status,
 )
 from ..services import merge_service, notify, sla_service
-from ..services.chart_service import chart_counts
+from ..services.chart_service import chart_counts, chart_counts_for_query
 from ..services.evidence_service import EvidenceError, read_upload, store_evidence
 from ..config import PUBLIC_BASE_URL
 from ..utils import audit, is_local_path, is_partial_request, page_url, redirect_to, render
@@ -50,20 +52,17 @@ def dashboard(request: Request, db: Session = Depends(get_db), user: User = Depe
     except Exception:
         logger.exception("SLA sweep failed")
         db.rollback()
-    alerts = filtered_alerts(db, request)
-    counts = {
-        "total": len(alerts),
-        "open": len([a for a in alerts if a.status == "Open"]),
-        "pending": len([a for a in alerts if a.status == "Pending"]),
-        "wip": len([a for a in alerts if a.status == "WIP"]),
-        "critical": len([a for a in alerts if a.severity == "Critical"]),
-        "overdue": len([a for a in alerts if sla_status(a)["class"] == "sla-overdue"]),
-    }
+    # One filter, three reads of it: the tiles, the panels and the table. All
+    # three are answered by the database, so the page costs the same at 50
+    # tickets as at 50,000.
+    base = alert_query(request, ordered=False)
+    counts = dashboard_counts(db, base)
+    alerts = list(db.scalars(base.order_by(Alert.created_at.desc()).limit(80)))
     context = {
-        "alerts": alerts[:80],
-        "total": len(alerts),
+        "alerts": alerts,
+        "total": counts["total"],
         "counts": counts,
-        "charts": chart_counts(alerts),
+        "charts": chart_counts_for_query(db, base.subquery()),
         "ranges": RANGE_CHOICES,
         # A calendar range replaces the preset window, so no pill stays lit.
         "active_range": "" if (request.query_params.get("from") or request.query_params.get("to")) else (request.query_params.get("range") or "all").lower(),

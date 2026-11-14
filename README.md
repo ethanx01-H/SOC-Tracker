@@ -276,7 +276,7 @@ All settings are controlled via environment variables. See `.env.example` for th
 | `TRUSTED_PROXIES`        | No       | `127.0.0.1/32,::1/128` | Peers allowed to set `X-Forwarded-For`   |
 | `DISPLAY_TIMEZONE`       | No       | `Asia/Yangon`          | Zone used to render stored UTC times     |
 | `DATABASE_URL`           | No       | SQLite file            | Postgres URL; switches the whole app     |
-| `WEB_CONCURRENCY`        | No       | `1`                    | Workers; above 1 needs Postgres          |
+| `WEB_CONCURRENCY`        | No       | `4`                    | Worker processes; see Performance        |
 | `REDIS_URL`              | No       | unset                  | Shared limiter and lockout counters      |
 | `RETENTION_DAYS`         | No       | `730`                  | Archive window for closed tickets        |
 | `METRICS_TOKEN`          | No       | unset                  | Bearer token for `/metrics`              |
@@ -295,6 +295,35 @@ identity. `/healthz` and `/static/` are exempt from the request limiter so the
 container healthcheck cannot throttle itself.
 
 Production startup fails unless both secrets are explicitly supplied and at least 32 characters long. Keep them stable and private.
+
+## Performance
+
+The dashboard, the queue and the CSV export are all built from one filter
+(`alert_query` in `soc_tracker/services/alert_service.py`), and the database
+answers it: tiles and pie panels are `COUNT` and `GROUP BY`, and the queue pages
+with `LIMIT`/`OFFSET`. Nothing loads the whole table to count it.
+
+Measured on a 5,000-ticket database, one host, SQLite:
+
+| page                     | before        | after, 1 worker | after, 4 workers |
+|--------------------------|---------------|-----------------|------------------|
+| dashboard, one analyst   | 1,300 ms      | 29 ms           | 29 ms            |
+| queue, one analyst       | 110 ms        | 14 ms           | 16 ms            |
+| dashboard, 10 at once    | ~70,000 ms    | 942 ms          | 78 ms            |
+| queue, 10 at once        | ~17,000 ms    | 551 ms          | 38 ms            |
+
+Ten concurrent analysts is the target, so `WEB_CONCURRENCY` now defaults to 4.
+Workers are separate processes, which is what turns the queue into parallel work;
+SQLite still serialises writes, and the rate limiter and login lockout counters
+live inside each worker, so four workers allow four times the per-client limit.
+Set `REDIS_URL` to share those counters, and move to Postgres (`DATABASE_URL`)
+when several analysts write at the same time or the database must live off this
+host.
+
+The SLA sweep runs at most once every two minutes per worker instead of on every
+page load, and reads the open tickets in one query rather than one query per
+ticket. `python -m soc_tracker.manage sweep-sla` does the same work from cron if
+you would rather schedule it.
 
 ## Development
 

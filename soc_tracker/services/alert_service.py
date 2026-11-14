@@ -12,11 +12,11 @@ from typing import Mapping
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import String, and_, case, cast, func, literal, or_, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ..config import DISPLAY_TIMEZONE, SEVERITIES, STATUSES, UPLOAD_DIR
+from ..config import DB_IS_SQLITE, DISPLAY_TIMEZONE, SEVERITIES, STATUSES, UPLOAD_DIR
 from ..models import Alert, AlertEvent, Evidence, User
 
 logger = logging.getLogger("soc_tracker.alert_service")
@@ -183,9 +183,26 @@ def sla_status(alert: Alert) -> dict[str, str]:
     return {"label": f"Due in {hours}h", "class": "sla-ok"}
 
 
-def filtered_alerts(db: Session, request) -> list[Alert]:
-    """Get alerts filtered by query parameters."""
-    query = select(Alert).order_by(Alert.created_at.desc())
+def _sla_due_sql(created_at, sla_hours):
+    """created_at + sla_hours, computed by the database.
+
+    SQLite has no interval type, so the hours are added with its datetime()
+    modifier while Postgres multiplies an interval. Keeping this in SQL is what
+    lets the SLA filter and the dashboard counts cover the whole queue without
+    pulling every ticket into Python first.
+    """
+    hours = func.coalesce(sla_hours, 8)
+    if DB_IS_SQLITE:
+        return func.datetime(created_at, literal("+") + cast(hours, String) + literal(" hours"))
+    return created_at + (hours * text("interval '1 hour'"))
+
+
+def alert_query(request, ordered: bool = True):
+    """The one filter every list, dashboard and export is built from."""
+    query = select(Alert)
+    if ordered:
+        query = query.order_by(Alert.created_at.desc())
+
     search = (request.query_params.get("q") or "").strip()
     severity = request.query_params.get("severity") or ""
     alert_status = request.query_params.get("status") or ""
@@ -234,31 +251,67 @@ def filtered_alerts(db: Session, request) -> list[Alert]:
     if analyst:
         query = query.where(Alert.analyst == analyst)
 
-    alerts = list(db.scalars(query))
+    # The SLA buckets are date arithmetic on two columns, so they can be a WHERE
+    # clause instead of a pass over every row. The two-hour boundary matches
+    # sla_status(), which rounds the remaining seconds up to whole hours.
+    if sla in {"overdue", "due-soon", "on-track", "closed"}:
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        if sla == "closed":
+            query = query.where(Alert.status == "Closed")
+        else:
+            due = _sla_due_sql(Alert.created_at, Alert.sla_hours)
+            if sla == "overdue":
+                query = query.where(Alert.status != "Closed", due < now)
+            elif sla == "due-soon":
+                query = query.where(Alert.status != "Closed", due >= now, due < now + timedelta(seconds=7201))
+            else:
+                query = query.where(Alert.status != "Closed", due >= now + timedelta(seconds=7201))
 
-    if sla == "overdue":
-        alerts = [a for a in alerts if sla_status(a)["class"] == "sla-overdue"]
-    elif sla == "closed":
-        alerts = [a for a in alerts if a.status == "Closed"]
-    elif sla == "due-soon":
-        alerts = [a for a in alerts if sla_status(a)["class"] == "sla-due-soon"]
-    elif sla == "on-track":
-        alerts = [a for a in alerts if sla_status(a)["class"] == "sla-ok"]
+    return query
 
-    return alerts
+
+def filtered_alerts(db: Session, request) -> list[Alert]:
+    """Every matching ticket. Used by the export and the "mine" queue, which
+    need the whole set; the list page pages in SQL instead."""
+    return list(db.scalars(alert_query(request)))
+
+
+def dashboard_counts(db: Session, query) -> dict[str, int]:
+    """The dashboard tiles, counted by the database.
+
+    This used to load every ticket and count in Python, which is fine at demo
+    size and thousands of rows of work at real size.
+    """
+    base = query.subquery()
+    due = _sla_due_sql(base.c.created_at, base.c.sla_hours)
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    row = db.execute(
+        select(
+            func.count().label("total"),
+            func.sum(case((base.c.status == "Open", 1), else_=0)).label("open"),
+            func.sum(case((base.c.status == "Pending", 1), else_=0)).label("pending"),
+            func.sum(case((base.c.status == "WIP", 1), else_=0)).label("wip"),
+            func.sum(case((base.c.severity == "Critical", 1), else_=0)).label("critical"),
+            func.sum(case((and_(base.c.status != "Closed", due < now), 1), else_=0)).label("overdue"),
+        ).select_from(base)
+    ).one()
+    return {key: int(value or 0) for key, value in row._mapping.items()}
 
 
 def filtered_alerts_paginated(db: Session, request, page: int = 1, per_page: int = 50) -> dict:
-    """Get paginated alerts with filters."""
-    all_alerts = filtered_alerts(db, request)
-    total = len(all_alerts)
+    """Get paginated alerts with filters, paged by the database.
+
+    Counting and slicing in Python meant every page load read the whole table
+    and then threw almost all of it away.
+    """
+    query = alert_query(request)
+    total = db.scalar(select(func.count()).select_from(query.order_by(None).subquery())) or 0
     total_pages = max(1, math.ceil(total / per_page))
     page = max(1, min(page, total_pages))
-    start = (page - 1) * per_page
-    end = start + per_page
+    alerts = list(db.scalars(query.limit(per_page).offset((page - 1) * per_page)))
 
     return {
-        "alerts": all_alerts[start:end],
+        "alerts": alerts,
         "page": page,
         "per_page": per_page,
         "total": total,
