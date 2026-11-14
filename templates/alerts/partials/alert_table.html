@@ -1,3 +1,5 @@
+{% set with_bulk = bulk_actions if bulk_actions is defined else true %}
+{% if with_bulk %}
 <form method="post" action="/alerts/bulk/" class="bulk-form" data-bulk-form>
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <input type="hidden" name="next" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
@@ -16,10 +18,13 @@
     </select>
     <button type="submit" data-bulk-apply disabled>Apply to selected</button>
   </div>
-  <div class="table">
+{% endif %}
+  <div class="table{% if not with_bulk %} no-bulk{% endif %}">
   {% for alert in alerts %}
     <div class="table-row">
-      <input type="checkbox" class="row-check" name="ids" value="{{ alert.id }}" data-row-check aria-label="Select {{ alert.alert_id }}">
+      {% if with_bulk %}
+        <input type="checkbox" class="row-check" name="ids" value="{{ alert.id }}" data-row-check aria-label="Select {{ alert.alert_id }}">
+      {% endif %}
       <a class="button" href="{{ alert.get_absolute_url() }}">{{ alert.alert_id }}</a>
       <strong>{{ alert.title }}</strong>
       <span class="severity-{{ alert.severity }}">{{ alert.severity }}</span>
@@ -33,4 +38,4 @@
     <div class="empty">No alerts found</div>
   {% endfor %}
   </div>
-</form>
+{% if with_bulk %}</form>{% endif %}

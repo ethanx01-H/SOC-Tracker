@@ -163,6 +163,49 @@ def test_bulk_toolbar_reports_selection_state(client, sessions):
     assert "data-bulk-apply disabled" in page.text
 
 
+def test_dashboard_has_no_bulk_editing(client, sessions):
+    """Bulk editing belongs on the queue page, not the read-only dashboard."""
+    db = sessions()
+    user = db.scalar(select(User).where(User.username == "l2"))
+    seed_alert(db, user, "Dashboard ticket")
+    db.close()
+
+    sign_in(client)
+    for path in ("/", "/?range=all"):
+        page = client.get(path)
+        assert "Dashboard ticket" in page.text
+        assert "data-bulk-all" not in page.text
+        assert "row-check" not in page.text
+        assert 'action="/alerts/bulk/"' not in page.text
+
+    # The fragment the dashboard swaps in must match the page it replaces.
+    fragment = client.get("/?range=all", headers={"X-Partial": "1"})
+    assert "row-check" not in fragment.text
+    assert "data-bulk-all" not in fragment.text
+
+
+def test_bulk_reports_a_status_that_is_already_set(client, sessions):
+    db = sessions()
+    user = db.scalar(select(User).where(User.username == "l2"))
+    alert = seed_alert(db, user, "Already WIP", status="WIP")
+    db.close()
+
+    token = sign_in(client)
+    response = client.post("/alerts/bulk/", data={
+        "csrf_token": token, "action": "status:WIP", "ids": [str(alert.id)],
+    })
+    assert response.status_code == 303
+
+    follow_up = client.get("/alerts/")
+    assert "Updated 0 ticket(s)." in follow_up.text
+    assert "already WIP" in follow_up.text
+
+    db = sessions()
+    assert db.get(Alert, alert.id).status == "WIP"
+    assert db.scalar(select(AuditLog).where(AuditLog.action == "alert.bulk_update")) is None
+    db.close()
+
+
 def test_bulk_assign_to_me(client, sessions):
     db = sessions()
     user = db.scalar(select(User).where(User.username == "l2"))

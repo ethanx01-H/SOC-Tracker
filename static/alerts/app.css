@@ -240,6 +240,7 @@ p {
 .table-row {
   display: grid;
   grid-template-columns: 24px 120px minmax(220px, 1fr) 100px 120px 120px 120px 120px;
+  /* no-bulk tables drop the checkbox column below */
   gap: 12px;
   align-items: center;
   padding: 12px;
@@ -829,4 +830,10 @@ body.lightbox-open {
   min-width: 86px;
   font-size: 0.82rem;
   font-variant-numeric: tabular-nums;
+}
+
+/* The dashboard has no bulk toolbar, so its rows lose the checkbox track and
+   get the width back. */
+.table.no-bulk .table-row {
+  grid-template-columns: 120px minmax(220px, 1fr) 100px 120px 120px 120px 120px;
 }

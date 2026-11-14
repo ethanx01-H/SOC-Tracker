@@ -66,6 +66,9 @@ def dashboard(request: Request, db: Session = Depends(get_db), user: User = Depe
         "charts": chart_counts(alerts),
         "ranges": RANGE_CHOICES,
         "active_range": (request.query_params.get("range") or "all").lower(),
+        # The dashboard is for reading the queue; bulk editing belongs on the
+        # queue page where the rows are the working set.
+        "bulk_actions": False,
     }
     if is_partial_request(request):
         return render(request, "alerts/partials/dashboard_results.html", context, db, user)
@@ -531,10 +534,19 @@ def alert_bulk(
     alerts = list(db.scalars(select(Alert).where(Alert.id.in_(selected))))
     changed = 0
     skipped = 0
+    # A ticket that is already in the requested state is not a failure, but it is
+    # also not a change: reporting "Updated 2 tickets" when nothing moved is what
+    # made the WIP action look broken.
+    unchanged = 0
+    already = ""
     for alert in alerts:
         if action == "assign_me":
             if alert.status == "Closed" or not can_create_alert(user):
                 skipped += 1
+                continue
+            if alert.assigned_to_id == user.id and alert.analyst == user.username:
+                unchanged += 1
+                already = "assigned to you"
                 continue
             alert.assigned_to = user
             alert.assigned_by = user
@@ -552,6 +564,10 @@ def alert_bulk(
             if wanted not in {"Open", "WIP", "Pending"} or alert.status == "Closed" or not can_edit_alert(user, alert):
                 skipped += 1
                 continue
+            if alert.status == wanted:
+                unchanged += 1
+                already = f"already {wanted}"
+                continue
             previous = alert.status
             alert.status = wanted
             alert.updated_by = user
@@ -567,11 +583,14 @@ def alert_bulk(
         audit(
             db, user, "alert.bulk_update",
             f"Bulk action '{action}' updated {changed} ticket(s)"
+            + (f", {unchanged} unchanged" if unchanged else "")
             + (f", skipped {skipped}." if skipped else "."),
             "alert_batch", str(changed), request,
         )
         db.commit()
     message = f"Updated {changed} ticket(s)."
+    if unchanged:
+        message += f" {unchanged} {already or 'unchanged'} — nothing to do there."
     if skipped:
         message += f" {skipped} skipped (closed, or not permitted)."
     return redirect_to(back, message)
