@@ -178,41 +178,46 @@ def test_a_year_range_uses_local_year_boundaries(client, sessions):
     assert "New year ticket" not in client.get("/alerts/?from=2025&to=2025").text
 
 
-def test_the_form_switches_inputs_to_the_period_in_the_url(client, sessions):
+def test_dates_are_written_dd_mm_yyyy(client, sessions):
     db = sessions()
     user = db.scalar(select(User).where(User.username == "l2"))
-    seed_alert(db, user, "Granularity ticket")
+    seed_alert(db, user, "Display ticket")
     db.close()
 
     sign_in(client)
-    month = client.get("/?from=2026-10&to=2026-10")
-    assert 'type="month"' in month.text
-    assert 'value="2026-10"' in month.text
-    assert '<option value="month" selected' in month.text
-
-    year = client.get("/?from=2026&to=2026")
-    assert 'type="number"' in year.text
-    assert 'value="2026"' in year.text
-    assert '<option value="year" selected' in year.text
-
-    day = client.get("/?from=2026-10-20")
-    assert 'type="date"' in day.text
-    assert '<option value="day" selected' in day.text
+    page = client.get("/?from=2026-11-01&to=2026-11-13")
+    # Shown the way the team writes dates, carried in the URL as ISO.
+    assert 'value="01/11/2026"' in page.text
+    assert 'value="13/11/2026"' in page.text
+    assert 'placeholder="dd/mm/yyyy"' in page.text
+    # The hidden native input keeps the ISO value so the picker opens on the day.
+    assert 'value="2026-11-01" class="date-picker"' in page.text
 
 
-def test_the_form_renders_the_calendar_inputs(client, sessions):
+def test_a_dd_mm_yyyy_link_is_understood(client, sessions):
+    """The server reads dd/mm/yyyy too, so the form works without JavaScript."""
+    db = sessions()
+    user = db.scalar(select(User).where(User.username == "l2"))
+    seed_at(db, user, "Typed date ticket", local_to_utc(2026, 10, 20, 10, 15))
+    db.close()
+
+    sign_in(client)
+    page = client.get("/alerts/?from=20/10/2026&to=20/10/2026")
+    assert "Typed date ticket" in page.text
+
+
+def test_impossible_days_are_ignored(client, sessions):
+    """31/02 is not a date; the filter is dropped instead of guessing."""
     db = sessions()
     user = db.scalar(select(User).where(User.username == "l2"))
     seed_alert(db, user, "Calendar ticket")
     db.close()
 
     sign_in(client)
-    page = client.get("/?from=2026-11-01&to=2026-11-13")
+    page = client.get("/alerts/?from=31/02/2026&to=2026-13-45")
+    assert "Calendar ticket" in page.text
     assert 'name="from"' in page.text
-    assert 'name="to"' in page.text
     assert 'type="date"' in page.text
-    assert 'value="2026-11-01"' in page.text
-    assert 'value="2026-11-13"' in page.text
 
 
 def test_dashboard_partial_request_returns_only_the_results(client, sessions):

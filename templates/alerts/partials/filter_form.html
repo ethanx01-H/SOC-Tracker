@@ -15,20 +15,26 @@
       <option value="{{ status }}" {% if request.query_params.get('status') == status %}selected{% endif %}>{{ status }}</option>
     {% endfor %}
   </select>
-  <span class="date-legend">Range</span>
-  <select name="unit" data-date-unit aria-label="Date granularity" title="Pick a single day, a whole month, or a whole year">
-    <option value="day" {% if date_unit == 'day' %}selected{% endif %}>Day</option>
-    <option value="month" {% if date_unit == 'month' %}selected{% endif %}>Month</option>
-    <option value="year" {% if date_unit == 'year' %}selected{% endif %}>Year</option>
-  </select>
   <span class="date-pair">
-    <label class="date-field" title="Show tickets filed in or after this period">
+    <label class="date-field" title="Show tickets filed on or after this day">
       <span>From</span>
-      <input type="{{ date_input_type }}" name="from" value="{{ date_from }}"{% if date_input_type == 'number' %} min="2000" max="2100" step="1" placeholder="2026"{% endif %} aria-label="From date">
+      <span class="date-input">
+        <input type="text" name="from" value="{{ date_from }}" placeholder="dd/mm/yyyy"
+               inputmode="numeric" autocomplete="off" spellcheck="false" maxlength="10"
+               aria-label="From date" data-date-text>
+        <input type="date" value="{{ date_from_iso }}" class="date-picker" tabindex="-1" aria-hidden="true" data-date-native>
+        <svg class="date-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="1.5" y="3" width="13" height="11.5" rx="2"/><path d="M1.5 6.5h13M5 1.5v3M11 1.5v3"/></svg>
+      </span>
     </label>
-    <label class="date-field" title="Show tickets filed in or before this period">
+    <label class="date-field" title="Show tickets filed on or before this day">
       <span>To</span>
-      <input type="{{ date_input_type }}" name="to" value="{{ date_to }}"{% if date_input_type == 'number' %} min="2000" max="2100" step="1" placeholder="2026"{% endif %} aria-label="To date">
+      <span class="date-input">
+        <input type="text" name="to" value="{{ date_to }}" placeholder="dd/mm/yyyy"
+               inputmode="numeric" autocomplete="off" spellcheck="false" maxlength="10"
+               aria-label="To date" data-date-text>
+        <input type="date" value="{{ date_to_iso }}" class="date-picker" tabindex="-1" aria-hidden="true" data-date-native>
+        <svg class="date-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="1.5" y="3" width="13" height="11.5" rx="2"/><path d="M1.5 6.5h13M5 1.5v3M11 1.5v3"/></svg>
+      </span>
     </label>
   </span>
   <button type="submit">Filter</button>

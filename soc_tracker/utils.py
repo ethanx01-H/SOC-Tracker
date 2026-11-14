@@ -2,7 +2,7 @@
 
 import logging
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
@@ -108,34 +108,43 @@ def base_context(request: Request, user: User | None, db: Session) -> dict:
     }
 
 
-def date_unit(raw: str) -> str | None:
-    """Which granularity a from/to value is written in."""
-    value = (raw or "").strip()
-    if len(value) == 4 and value.isdigit():
-        return "year"
-    if len(value) == 7 and value[4] == "-":
-        return "month"
-    if len(value) == 10 and value[4] == "-" and value[7] == "-":
-        return "day"
-    return None
-
-
 def _date_fields(request: Request) -> dict:
-    """Render the calendar inputs at the granularity the URL is already using.
+    """Render the calendar fields as dd/mm/yyyy, the way the team writes dates.
 
-    Day / month / year share the two fields, so the input type follows the value
-    that is set. A value that does not fit the chosen type is left out rather
-    than shown as an invalid date.
+    The value in the URL stays ISO (2026-10-20) so links stay unambiguous and
+    sortable; only the display is converted. A hidden date input carries the ISO
+    value for the browser's picker.
     """
     raw_from = request.query_params.get("from", "")
     raw_to = request.query_params.get("to", "")
-    unit = date_unit(raw_from) or date_unit(raw_to) or "day"
     return {
-        "date_unit": unit,
-        "date_input_type": {"day": "date", "month": "month", "year": "number"}[unit],
-        "date_from": raw_from if date_unit(raw_from) == unit else "",
-        "date_to": raw_to if date_unit(raw_to) == unit else "",
+        "date_from": display_day(raw_from),
+        "date_to": display_day(raw_to),
+        "date_from_iso": iso_day(raw_from),
+        "date_to_iso": iso_day(raw_to),
     }
+
+
+def _parse_iso_day(raw: str) -> date | None:
+    value = (raw or "").strip()
+    if len(value) != 10 or value[4] != "-" or value[7] != "-":
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def display_day(raw: str) -> str:
+    """ISO day to dd/mm/yyyy; anything else is passed through untouched."""
+    parsed = _parse_iso_day(raw)
+    return parsed.strftime("%d/%m/%Y") if parsed else (raw or "").strip()
+
+
+def iso_day(raw: str) -> str:
+    """The ISO value for a day, or empty when the value is not a day."""
+    parsed = _parse_iso_day(raw)
+    return parsed.isoformat() if parsed else ""
 
 
 def render(request: Request, template: str, context: dict, db: Session, user: User | None = None) -> HTMLResponse:

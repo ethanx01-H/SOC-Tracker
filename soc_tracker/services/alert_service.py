@@ -40,10 +40,11 @@ DISPLAY_TZ = ZoneInfo(DISPLAY_TIMEZONE)
 
 
 def _parse_period(raw: str) -> tuple[date, date] | None:
-    """Read a day, a month (2026-10) or a year (2026) as [first day, day after last].
+    """Read a day (2026-10-20 or 20/10/2026), a month or a year.
 
-    One parser for all three so the calendar can offer Day / Month / Year
-    without the filter growing three code paths that drift apart.
+    The form shows days as dd/mm/yyyy, so that shape is accepted too; months and
+    years stay readable from a link even though the picker only offers days.
+    Returns [first day, day after last].
     """
     value = (raw or "").strip()
     if not value:
@@ -57,6 +58,9 @@ def _parse_period(raw: str) -> tuple[date, date] | None:
             first = date(int(year), int(month), 1)
             following = date(first.year + 1, 1, 1) if first.month == 12 else date(first.year, first.month + 1, 1)
             return first, following
+        if len(value) == 10 and value[2] == "/" and value[5] == "/":
+            day = datetime.strptime(value, "%d/%m/%Y").date()
+            return day, day + timedelta(days=1)
         day = date.fromisoformat(value)
         return day, day + timedelta(days=1)
     except ValueError:

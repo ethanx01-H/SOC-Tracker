@@ -13,34 +13,49 @@
   let controller = null;
   let timer = null;
 
+  // The fields are typed as dd/mm/yyyy, the way the team writes dates; the URL
+  // and the server keep ISO (yyyy-mm-dd), so a link stays unambiguous.
+  function toIso(text) {
+    const match = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec((text || "").trim());
+    if (!match) return "";
+    const day = Number(match[1]);
+    const month = Number(match[2]);
+    const year = Number(match[3]);
+    const parsed = new Date(year, month - 1, day);
+    if (parsed.getFullYear() !== year || parsed.getMonth() !== month - 1 || parsed.getDate() !== day) return "";
+    const pad = (value) => String(value).padStart(2, "0");
+    return `${year}-${pad(month)}-${pad(day)}`;
+  }
+
+  function toDisplay(iso) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec((iso || "").trim());
+    return match ? `${match[3]}/${match[2]}/${match[1]}` : "";
+  }
+
+  function nativeOf(textInput) {
+    return textInput.parentElement.querySelector("[data-date-native]");
+  }
+
+  function setDate(textInput, iso) {
+    textInput.value = iso ? toDisplay(iso) : "";
+    const native = nativeOf(textInput);
+    if (native) native.value = iso || "";
+  }
+
   function buildUrl() {
     const params = new URLSearchParams();
     new FormData(form).forEach((value, key) => {
-      // The granularity is inferred from the value itself, so it stays out of
-      // the URL and a link stays readable: ?from=2026-10&to=2026-10.
-      if (key === "unit") return;
       const text = String(value).trim();
+      if (key === "from" || key === "to") {
+        // Half-typed or impossible dates are dropped rather than sent as text.
+        const iso = toIso(text);
+        if (iso) params.append(key, iso);
+        return;
+      }
       if (text) params.append(key, text);
     });
     const query = params.toString();
     return location.pathname + (query ? "?" + query : "");
-  }
-
-  function applyDateType(type) {
-    form.querySelectorAll("input[name='from'], input[name='to']").forEach((input) => {
-      input.type = type;
-      input.value = "";
-      input.dataset.autofilled = "";
-      if (type === "number") {
-        input.min = "2000";
-        input.max = "2100";
-        input.step = "1";
-        input.placeholder = "2026";
-      } else {
-        ["min", "max", "step"].forEach((name) => input.removeAttribute(name));
-        input.placeholder = "";
-      }
-    });
   }
 
   function syncRangePills() {
@@ -86,51 +101,72 @@
   });
 
   function syncPartner(input) {
-    // Picking a period in one field fills the other with the same period, so a
-    // month or a year is one click rather than two. A value the user typed
-    // themselves is kept — only an auto-filled partner is replaced, and the two
+    // Picking a day in one field fills the other with the same day, so a single
+    // day is one pick. A day the user typed themselves is kept, and the two
     // bounds are always kept in order.
-    const other = form.querySelector(input.name === "from" ? "input[name='to']" : "input[name='from']");
-    if (!other || !input.value) return;
+    const other = form.querySelector(input.name === "from" ? "[data-date-text][name='to']" : "[data-date-text][name='from']");
+    const mine = toIso(input.value);
+    if (!other || !mine) return;
+    const theirs = toIso(other.value);
     const autofilled = other.dataset.autofilled === "1";
-    if (!other.value || autofilled) {
-      other.value = input.value;
+    if (!theirs || autofilled) {
+      setDate(other, mine);
       other.dataset.autofilled = "1";
       return;
     }
-    if (input.name === "from" && other.value < input.value) {
-      other.value = input.value;
-    } else if (input.name === "to" && other.value > input.value) {
-      other.value = input.value;
-    }
+    if (input.name === "from" && theirs < mine) setDate(other, mine);
+    else if (input.name === "to" && theirs > mine) setDate(other, mine);
   }
 
   form.addEventListener("change", (event) => {
-    // Day, month and year all share the two fields; the input type is what
-    // changes, so the same change event covers all three.
-    if (event.target.matches("select:not([data-date-unit]), input[name='from'], input[name='to']")) {
-      if (event.target.name === "from" || event.target.name === "to") {
-        // This field was edited by hand, so it is no longer ours to overwrite.
-        event.target.dataset.autofilled = "";
-        syncPartner(event.target);
+    const target = event.target;
+
+    // The browser's own calendar wrote an ISO day into the hidden input.
+    if (target.matches("[data-date-native]")) {
+      const text = target.parentElement.querySelector("[data-date-text]");
+      if (!text) return;
+      setDate(text, target.value);
+      text.dataset.autofilled = "";
+      syncPartner(text);
+      refresh(buildUrl());
+      return;
+    }
+
+    if (target.matches("select")) {
+      refresh(buildUrl());
+      return;
+    }
+
+    if (target.matches("[data-date-text]")) {
+      const iso = toIso(target.value);
+      if (target.value.trim() && !iso) {
+        // Something like 31/02/2026 is not a day; clearing is clearer than
+        // silently filtering by a different date.
+        setDate(target, "");
+        refresh(buildUrl());
+        return;
       }
+      setDate(target, iso);
+      target.dataset.autofilled = "";
+      syncPartner(target);
       refresh(buildUrl());
     }
   });
 
-  const unitSelect = form.querySelector("[data-date-unit]");
-  if (unitSelect) {
-    unitSelect.addEventListener("change", () => {
-      const type = { day: "date", month: "month", year: "number" }[unitSelect.value] || "date";
-      applyDateType(type);
-      // The old value was written at a different granularity, so it is dropped
-      // rather than reinterpreted: 20 Oct as a year means nothing.
-      refresh(buildUrl());
-    });
-  }
-
   form.addEventListener("input", (event) => {
-    if (!event.target.matches("input[name='q']")) return;
+    const target = event.target;
+
+    if (target.matches("[data-date-text]")) {
+      // Type the digits, get the slashes: 20102026 becomes 20/10/2026.
+      const digits = target.value.replace(/\D/g, "").slice(0, 8);
+      let masked = digits.slice(0, 2);
+      if (digits.length >= 3) masked += "/" + digits.slice(2, 4);
+      if (digits.length >= 5) masked += "/" + digits.slice(4, 8);
+      if (target.value !== masked) target.value = masked;
+      return;
+    }
+
+    if (!target.matches("input[name='q']")) return;
     clearTimeout(timer);
     timer = setTimeout(() => refresh(buildUrl()), 300);
   });
@@ -141,9 +177,8 @@
     if (clear) {
       event.preventDefault();
       form.querySelector("input[name='q']").value = "";
-      form.querySelectorAll("select:not([data-date-unit])").forEach((select) => { select.value = ""; });
-      if (unitSelect) unitSelect.value = "day";
-      applyDateType("date");
+      form.querySelectorAll("select").forEach((select) => { select.value = ""; });
+      form.querySelectorAll("[data-date-text]").forEach((input) => setDate(input, ""));
       refresh(location.pathname);
       return;
     }
