@@ -1,0 +1,7 @@
+# Development and test dependencies. The runtime image installs requirements.txt
+# only, so a test tool with a security advisory never ships to production.
+-r requirements.txt
+pytest>=9.0.3,<10.0
+pytest-asyncio>=1.0,<2.0
+fakeredis>=2.20,<3.0
+pip-audit>=2.7,<3.0

@@ -221,7 +221,7 @@ Create users, manage roles (L1/L2/L3), and reset passwords.
 - Search matches ticket number, title, description, asset, source, analyst and IOC, and filters apply in place without reloading the page or losing your scroll position
 - Notifications by email and Microsoft Teams on new high-severity tickets, assignment and escalation — each channel stays inert until it is configured
 - Evidence is attached when the ticket is created; there is no later upload, so a ticket's evidence is exactly what the analyst filed with it
-- Every file is stored with its SHA-256 recorded; PNG and JPEG appear as small thumbnails (four per row) that open a full-size popup, everything else is listed as a normal row that downloads
+- Every file is stored with its SHA-256 recorded; PNG and JPEG appear as small thumbnails (four per row) that open a full-size popup, everything else is listed as a normal row that downloads. Every download and preview is written to the audit trail with the reader, the file name and its hash — chain of custody, not just a list of uploads
 - Evidence uploads accept `.xlsx`, `.csv`, `.jpg`, `.jpeg`, `.png`, `.txt`, `.log`, `.json`, `.pdf`, `.pcap`, `.pcapng`, up to 6 MB each; a rejected file cancels the whole create, so no half-made ticket is left behind
 - Investigation notes and activity-log timeline per alert
 
@@ -350,8 +350,14 @@ The `--reload` flag auto-restarts on code changes. Do not use `--reload` in prod
 Run the test suite:
 
 ```bash
-pip install pytest pytest-asyncio
+pip install -r requirements-dev.txt
 pytest tests/ -v
+```
+
+The runtime image installs `requirements.txt` only, so test tooling never ships. Check the dependency tree for advisories before a release:
+
+```bash
+pip-audit -r requirements.txt
 ```
 
 Test coverage includes:
