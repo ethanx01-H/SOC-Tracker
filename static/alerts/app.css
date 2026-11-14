@@ -1,5 +1,5 @@
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
   --bg: #f7f8fa;
   --panel: #ffffff;
   --panel-strong: #f0f4f8;
@@ -15,22 +15,25 @@
   --shadow: 0 10px 24px rgba(23, 32, 42, 0.08);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0f141b;
-    --panel: #151c25;
-    --panel-strong: #1b2430;
-    --field: #111821;
-    --text: #edf2f7;
-    --muted: #a9b7c6;
-    --line: #2c3847;
-    --primary: #4c8dff;
-    --primary-dark: #2f6ee6;
-    --danger: #ff8a80;
-    --warning: #f6c453;
-    --accent: #2dd4bf;
-    --shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
-  }
+/* theme.js writes data-theme on <html> before the first paint, so the palette
+   is one attribute rather than a media query the switch would have to fight.
+   color-scheme follows it too, which is what makes the native selects and
+   scrollbars match. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0f141b;
+  --panel: #151c25;
+  --panel-strong: #1b2430;
+  --field: #111821;
+  --text: #edf2f7;
+  --muted: #a9b7c6;
+  --line: #2c3847;
+  --primary: #4c8dff;
+  --primary-dark: #2f6ee6;
+  --danger: #ff8a80;
+  --warning: #f6c453;
+  --accent: #2dd4bf;
+  --shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
 }
 
 * {
@@ -128,6 +131,54 @@ textarea {
 .sidebar-footer {
   color: #b8c7d9;
   font-size: 0.84rem;
+}
+
+/* Light / dark switch under the title. The sidebar is dark in both themes, so
+   this is styled against the sidebar's own colours rather than the tokens. */
+.theme-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  margin-top: -12px;
+  padding: 2px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.theme-switch button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #8ea3b8;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.theme-switch button:hover {
+  color: #ffffff;
+}
+
+.theme-switch button[aria-pressed="true"] {
+  background: rgba(255, 255, 255, 0.19);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+.theme-switch svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .nav {
@@ -455,6 +506,40 @@ p {
 .sla-overdue {
   background: #fee4e2;
   color: var(--danger);
+}
+
+/* The pills are tinted for a white page, so on the dark palette the same pale
+   fills glow. Same hues, translucent, so they read as labels rather than lights. */
+:root[data-theme="dark"] .pill {
+  background: #222d3a;
+  color: #dbe5f0;
+}
+
+:root[data-theme="dark"] .status-open {
+  background: #22303e;
+  color: #cfdceb;
+}
+
+:root[data-theme="dark"] .status-pending,
+:root[data-theme="dark"] .sla-due-soon {
+  background: rgba(246, 196, 83, 0.16);
+  color: #f6c453;
+}
+
+:root[data-theme="dark"] .status-wip {
+  background: rgba(76, 141, 255, 0.18);
+  color: #8ab4ff;
+}
+
+:root[data-theme="dark"] .status-closed,
+:root[data-theme="dark"] .sla-ok {
+  background: rgba(45, 212, 191, 0.16);
+  color: #5ee0cd;
+}
+
+:root[data-theme="dark"] .sla-overdue {
+  background: rgba(255, 138, 128, 0.18);
+  color: #ff8a80;
 }
 
 @media (max-width: 1180px) {
@@ -1140,10 +1225,8 @@ body.lightbox-open {
   bottom: 2px;
 }
 
-@media (prefers-color-scheme: dark) {
-  /* A soft drop shadow disappears on a dark page; the card needs a real edge. */
-  .dp {
-    border-color: #2c3847;
-    box-shadow: 0 22px 48px rgba(0, 0, 0, 0.55);
-  }
+/* A soft drop shadow disappears on a dark page; the card needs a real edge. */
+:root[data-theme="dark"] .dp {
+  border-color: #2c3847;
+  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.55);
 }

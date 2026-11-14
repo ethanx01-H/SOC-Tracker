@@ -1,10 +1,11 @@
 <!doctype html>
-<html lang="en" data-theme="system">
+<html lang="en" data-theme="light">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}SOC Alert Tracker{% endblock %}</title>
-    <link rel="stylesheet" href="{{ url_for('static', path='alerts/app.css') }}?v=33">
+    <link rel="stylesheet" href="{{ url_for('static', path='alerts/app.css') }}?v=36">
+    <script src="{{ url_for('static', path='alerts/theme.js') }}?v=35"></script>
   </head>
   <body>
     <div class="app-shell">
@@ -15,6 +16,16 @@
             <strong>SOC Tracker</strong>
             <span>{{ current_role or "No role" }}</span>
           </div>
+        </div>
+        <div class="theme-switch" role="group" aria-label="Colour theme">
+          <button type="button" data-theme-choice="light" aria-pressed="false" title="Light theme">
+            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="3.2"/><path d="M8 1.2v1.6M8 13.2v1.6M1.2 8h1.6M13.2 8h1.6M3.2 3.2l1.1 1.1M11.7 11.7l1.1 1.1M12.8 3.2l-1.1 1.1M4.3 11.7l-1.1 1.1"/></svg>
+            Light
+          </button>
+          <button type="button" data-theme-choice="dark" aria-pressed="false" title="Dark theme">
+            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M13.4 9.9A5.9 5.9 0 0 1 6.1 2.6a5.9 5.9 0 1 0 7.3 7.3Z"/></svg>
+            Dark
+          </button>
         </div>
         <nav class="nav">
           <a href="/">Dashboard</a>

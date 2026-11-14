@@ -552,3 +552,16 @@ def test_elastic_import_page_moved_without_breaking(client, db):
     response = client.post("/elastic/import/", data={"raw_json": payload, "csrf_token": token})
     assert response.status_code == 303
     assert db.query(Alert).filter(Alert.external_id == "logs:moved-1").count() == 1
+
+
+def test_theme_switch_sits_under_the_title(client):
+    """Light/dark is a choice on the page, not just the operating system's."""
+    sign_in(client)
+    page = client.get("/")
+    assert 'data-theme-choice="light"' in page.text
+    assert 'data-theme-choice="dark"' in page.text
+    assert "alerts/theme.js" in page.text
+
+    # One attribute drives the palette; the switch is what writes it.
+    css = client.get("/static/alerts/app.css").text
+    assert ':root[data-theme="dark"]' in css
