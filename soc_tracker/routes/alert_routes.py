@@ -45,10 +45,10 @@ router = APIRouter()
 
 @router.get("/", response_class=HTMLResponse)
 def dashboard(request: Request, db: Session = Depends(get_db), user: User = Depends(require_user)):
-    # Lazy SLA sweep: keeps breach history current without a scheduler. Idempotent,
-    # and a failure here must never break the dashboard.
+    # Lazy SLA sweep: keeps breach history current without a scheduler. Throttled
+    # so a page load does not pay for it, and a failure must never break the page.
     try:
-        sla_service.sweep(db)
+        sla_service.sweep_throttled(db)
     except Exception:
         logger.exception("SLA sweep failed")
         db.rollback()

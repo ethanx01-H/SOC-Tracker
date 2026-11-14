@@ -101,10 +101,13 @@ def startup() -> None:
     """Initialize database in development only; deployment migrates before serving."""
     logger.info("Starting SOC Alert Tracker...")
     if DB_IS_SQLITE and WEB_CONCURRENCY > 1:
-        # SQLite serialises writers across the whole file; several worker
-        # processes on one file turn that into lock timeouts, not parallelism.
-        logger.warning(
-            "WEB_CONCURRENCY=%s with SQLite: run one worker, or set DATABASE_URL to Postgres.",
+        # Reads parallelise fine over WAL; writes still serialise on one file,
+        # and the limiter and lockout counters live inside each worker, so N
+        # workers allow N times the limit. Postgres plus Redis is the way out
+        # once several analysts are writing at once.
+        logger.info(
+            "WEB_CONCURRENCY=%s on SQLite: reads run in parallel, writes serialise, "
+            "and per-client limits apply per worker.",
             WEB_CONCURRENCY,
         )
     if DB_IS_SQLITE and os.environ.get("APP_ENV", "development").lower() == "production":

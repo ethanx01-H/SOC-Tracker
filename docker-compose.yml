@@ -13,7 +13,7 @@ services:
       # Shared limiter counters. Set REDIS_URL=redis://redis:6379/0 and start with
       # --profile redis when WEB_CONCURRENCY is greater than 1.
       REDIS_URL: ${REDIS_URL:-}
-      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-1}
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-4}
       COOKIE_SECURE: ${COOKIE_SECURE:-0}
       # The host proxy reaches the container over the Docker bridge, so the
       # container sees it as a private 172.x address. If your Docker network uses

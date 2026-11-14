@@ -6,14 +6,22 @@ per missed due date and closes it out with how late the ticket actually was.
 """
 
 import logging
+import threading
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from ..models import Alert, SlaBreach
 
 logger = logging.getLogger("soc_tracker.sla")
+
+# How often a page load may trigger a sweep. The dashboard calls this on every
+# load, so without a floor the same scan ran for every analyst, every refresh.
+SWEEP_INTERVAL = timedelta(seconds=120)
+
+_last_sweep: datetime | None = None
+_sweep_lock = threading.Lock()
 
 
 def utcnow() -> datetime:
@@ -25,35 +33,54 @@ def due_at(alert: Alert) -> datetime:
 
 
 def sweep(db: Session, now: datetime | None = None) -> dict:
-    """Record newly missed SLAs and close out breaches for finished tickets."""
+    """Record newly missed SLAs and close out breaches for finished tickets.
+
+    Two queries instead of two per ticket: the open tickets and their existing
+    breaches are read in bulk, and the comparison runs over plain rows rather
+    than ORM objects.
+    """
     now = now or utcnow()
     opened = 0
     resolved = 0
 
-    active = db.scalars(select(Alert).where(Alert.status != "Closed")).all()
-    for alert in active:
-        due = due_at(alert)
-        if now <= due:
-            continue
-        exists = db.scalar(
-            select(SlaBreach.id).where(SlaBreach.alert_id == alert.id, SlaBreach.due_at == due)
-        )
-        if exists:
-            continue
-        db.add(SlaBreach(
-            alert_id=alert.id,
-            alert_ref=alert.alert_id,
-            severity=alert.severity,
-            due_at=due,
-            detected_at=now,
-        ))
-        opened += 1
+    active = db.execute(
+        select(Alert.id, Alert.alert_id, Alert.severity, Alert.created_at, Alert.sla_hours)
+        .where(Alert.status != "Closed")
+    ).all()
 
-    for breach in db.scalars(select(SlaBreach).where(SlaBreach.resolved_at.is_(None))).all():
-        alert = db.get(Alert, breach.alert_id)
-        if alert is not None and alert.status != "Closed":
+    missed = []
+    for alert_id, alert_ref, severity, created_at, sla_hours in active:
+        due = (created_at or now) + timedelta(hours=sla_hours or 8)
+        if now > due:
+            missed.append((alert_id, alert_ref, severity, due))
+
+    if missed:
+        already = set(
+            db.execute(
+                select(SlaBreach.alert_id, SlaBreach.due_at)
+                .where(SlaBreach.alert_id.in_([row[0] for row in missed]))
+            ).all()
+        )
+        for alert_id, alert_ref, severity, due in missed:
+            if (alert_id, due) in already:
+                continue
+            db.add(SlaBreach(
+                alert_id=alert_id,
+                alert_ref=alert_ref,
+                severity=severity,
+                due_at=due,
+                detected_at=now,
+            ))
+            opened += 1
+
+    for breach, status, closed_at in db.execute(
+        select(SlaBreach, Alert.status, Alert.closed_at)
+        .join(Alert, Alert.id == SlaBreach.alert_id, isouter=True)
+        .where(SlaBreach.resolved_at.is_(None))
+    ):
+        if status is not None and status != "Closed":
             continue
-        finished = (alert.closed_at if alert is not None and alert.closed_at else now)
+        finished = closed_at if closed_at else now
         breach.resolved_at = finished
         breach.late_hours = max(0, int((finished - breach.due_at).total_seconds() // 3600))
         resolved += 1
@@ -64,16 +91,37 @@ def sweep(db: Session, now: datetime | None = None) -> dict:
     return {"opened": opened, "resolved": resolved}
 
 
+def sweep_throttled(db: Session, now: datetime | None = None) -> dict:
+    """Sweep at most once per SWEEP_INTERVAL, for callers on a page-load path.
+
+    The first analyst to load the dashboard after the interval does the work;
+    everyone else reads what the tiles already need.
+    """
+    global _last_sweep
+    now = now or utcnow()
+    with _sweep_lock:
+        if _last_sweep is not None and now - _last_sweep < SWEEP_INTERVAL:
+            return {"opened": 0, "resolved": 0, "skipped": True}
+        _last_sweep = now
+    return sweep(db, now=now)
+
+
 def summary(db: Session) -> dict:
-    """Counts for the dashboard and metrics endpoint."""
-    rows = db.scalars(select(SlaBreach)).all()
-    open_breaches = [row for row in rows if row.resolved_at is None]
-    late = [row.late_hours for row in rows if row.late_hours is not None]
+    """Counts for the dashboard and metrics endpoint, aggregated in SQL."""
+    total, open_breaches, average_late = db.execute(
+        select(
+            func.count(),
+            func.sum(case((SlaBreach.resolved_at.is_(None), 1), else_=0)),
+            func.avg(SlaBreach.late_hours),
+        )
+    ).one()
+    open_breaches = int(open_breaches or 0)
+    total = int(total or 0)
     return {
-        "total": len(rows),
-        "open": len(open_breaches),
-        "closed": len(rows) - len(open_breaches),
-        "average_late_hours": round(sum(late) / len(late), 1) if late else 0.0,
+        "total": total,
+        "open": open_breaches,
+        "closed": total - open_breaches,
+        "average_late_hours": round(float(average_late), 1) if average_late is not None else 0.0,
     }
 
 
