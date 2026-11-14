@@ -21,9 +21,11 @@
       <span class="date-input">
         <input type="text" name="from" value="{{ date_from }}" placeholder="dd/mm/yyyy"
                inputmode="numeric" autocomplete="off" spellcheck="false" maxlength="10"
-               aria-label="From date" data-date-text>
-        <input type="date" value="{{ date_from_iso }}" class="date-picker" tabindex="-1" aria-hidden="true" data-date-native>
-        <svg class="date-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="1.5" y="3" width="13" height="11.5" rx="2"/><path d="M1.5 6.5h13M5 1.5v3M11 1.5v3"/></svg>
+               aria-label="From date" data-date-text data-date-label="From date">
+        <button type="button" class="date-clear" data-date-clear aria-label="Clear from date" title="Clear" hidden>&times;</button>
+        <button type="button" class="date-open" data-date-open aria-label="Open calendar" title="Open calendar">
+          <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="1.5" y="3" width="13" height="11.5" rx="2"/><path d="M1.5 6.5h13M5 1.5v3M11 1.5v3"/></svg>
+        </button>
       </span>
     </label>
     <label class="date-field" title="Show tickets filed on or before this day">
@@ -31,9 +33,11 @@
       <span class="date-input">
         <input type="text" name="to" value="{{ date_to }}" placeholder="dd/mm/yyyy"
                inputmode="numeric" autocomplete="off" spellcheck="false" maxlength="10"
-               aria-label="To date" data-date-text>
-        <input type="date" value="{{ date_to_iso }}" class="date-picker" tabindex="-1" aria-hidden="true" data-date-native>
-        <svg class="date-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="1.5" y="3" width="13" height="11.5" rx="2"/><path d="M1.5 6.5h13M5 1.5v3M11 1.5v3"/></svg>
+               aria-label="To date" data-date-text data-date-label="To date">
+        <button type="button" class="date-clear" data-date-clear aria-label="Clear to date" title="Clear" hidden>&times;</button>
+        <button type="button" class="date-open" data-date-open aria-label="Open calendar" title="Open calendar">
+          <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="1.5" y="3" width="13" height="11.5" rx="2"/><path d="M1.5 6.5h13M5 1.5v3M11 1.5v3"/></svg>
+        </button>
       </span>
     </label>
   </span>

@@ -120,8 +120,6 @@ def _date_fields(request: Request) -> dict:
     return {
         "date_from": display_day(raw_from),
         "date_to": display_day(raw_to),
-        "date_from_iso": iso_day(raw_from),
-        "date_to_iso": iso_day(raw_to),
     }
 
 
@@ -139,12 +137,6 @@ def display_day(raw: str) -> str:
     """ISO day to dd/mm/yyyy; anything else is passed through untouched."""
     parsed = _parse_iso_day(raw)
     return parsed.strftime("%d/%m/%Y") if parsed else (raw or "").strip()
-
-
-def iso_day(raw: str) -> str:
-    """The ISO value for a day, or empty when the value is not a day."""
-    parsed = _parse_iso_day(raw)
-    return parsed.isoformat() if parsed else ""
 
 
 def render(request: Request, template: str, context: dict, db: Session, user: User | None = None) -> HTMLResponse:

@@ -190,8 +190,9 @@ def test_dates_are_written_dd_mm_yyyy(client, sessions):
     assert 'value="01/11/2026"' in page.text
     assert 'value="13/11/2026"' in page.text
     assert 'placeholder="dd/mm/yyyy"' in page.text
-    # The hidden native input keeps the ISO value so the picker opens on the day.
-    assert 'value="2026-11-01" class="date-picker"' in page.text
+    # The calendar is our own card now, opened from the button beside the field.
+    assert 'data-date-open' in page.text
+    assert "alerts/datepicker.js" in page.text
 
 
 def test_a_dd_mm_yyyy_link_is_understood(client, sessions):
@@ -217,7 +218,7 @@ def test_impossible_days_are_ignored(client, sessions):
     page = client.get("/alerts/?from=31/02/2026&to=2026-13-45")
     assert "Calendar ticket" in page.text
     assert 'name="from"' in page.text
-    assert 'type="date"' in page.text
+    assert 'placeholder="dd/mm/yyyy"' in page.text
 
 
 def test_dashboard_partial_request_returns_only_the_results(client, sessions):
