@@ -12,11 +12,13 @@ from typing import Mapping
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import String, and_, case, cast, func, literal, or_, select, text
+from sqlalchemy import DateTime, String, and_, case, cast, func, literal, or_, select, text
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.functions import FunctionElement
 
-from ..config import DB_IS_SQLITE, DISPLAY_TIMEZONE, SEVERITIES, STATUSES, UPLOAD_DIR
+from ..config import DISPLAY_TIMEZONE, SEVERITIES, STATUSES, UPLOAD_DIR
 from ..models import Alert, AlertEvent, Evidence, User
 
 logger = logging.getLogger("soc_tracker.alert_service")
@@ -183,18 +185,46 @@ def sla_status(alert: Alert) -> dict[str, str]:
     return {"label": f"Due in {hours}h", "class": "sla-ok"}
 
 
-def _sla_due_sql(created_at, sla_hours):
-    """created_at + sla_hours, computed by the database.
+class sla_due(FunctionElement):
+    """created_at plus sla_hours, in whatever SQL the dialect speaks.
 
-    SQLite has no interval type, so the hours are added with its datetime()
-    modifier while Postgres multiplies an interval. Keeping this in SQL is what
-    lets the SLA filter and the dashboard counts cover the whole queue without
-    pulling every ticket into Python first.
+    SQLite has no interval type, so the hours go through its datetime()
+    modifier; Postgres multiplies an interval. The dialect picks at compile
+    time rather than at import time, because the configured database and the
+    database a query runs against are not always the same one - the test suite
+    is SQLite while an instance is configured for Postgres.
     """
-    hours = func.coalesce(sla_hours, 8)
-    if DB_IS_SQLITE:
-        return func.datetime(created_at, literal("+") + cast(hours, String) + literal(" hours"))
-    return created_at + (hours * text("interval '1 hour'"))
+
+    type = DateTime()
+    name = "sla_due"
+    inherit_cache = True
+
+
+@compiles(sla_due, "sqlite")
+def _sla_due_sqlite(element, compiler, **kw):
+    created_at, hours = list(element.clauses)
+    return "datetime(%s, '+' || %s || ' hours')" % (
+        compiler.process(created_at, **kw),
+        compiler.process(hours, **kw),
+    )
+
+
+@compiles(sla_due, "postgresql")
+def _sla_due_postgres(element, compiler, **kw):
+    created_at, hours = list(element.clauses)
+    return "(%s + (%s * interval '1 hour'))" % (
+        compiler.process(created_at, **kw),
+        compiler.process(hours, **kw),
+    )
+
+
+def _sla_due_sql(created_at, sla_hours):
+    """The SLA deadline, computed by the database rather than in Python.
+
+    Keeping it in SQL is what lets the SLA filter and the dashboard counts cover
+    the whole queue without pulling every ticket into memory first.
+    """
+    return sla_due(created_at, func.coalesce(sla_hours, 8))
 
 
 def alert_query(request, ordered: bool = True):
